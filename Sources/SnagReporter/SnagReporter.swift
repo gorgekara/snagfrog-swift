@@ -3,7 +3,7 @@ import Foundation
 import AppKit
 #endif
 
-/// Opens your app's Snag report page in the browser, after uploading logs,
+/// Opens your app's SnagFrog report page in the browser, after uploading logs,
 /// diagnostics and (optionally) a snapshot of the key window.
 ///
 /// ```swift
@@ -28,7 +28,7 @@ public struct SnagReporter: Sendable {
 
     /// Collects context, uploads it, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
-    /// - Parameter showsProgress: show a small Snag panel while logs upload.
+    /// - Parameter showsProgress: show a small SnagFrog panel while logs upload.
     @MainActor
     @discardableResult
     public func report(

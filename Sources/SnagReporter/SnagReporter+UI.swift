@@ -2,7 +2,7 @@
 import AppKit
 
 extension SnagReporter {
-    /// The Snag app icon (the frog), for menus, buttons and about boxes.
+    /// The SnagFrog app icon, for menus, buttons and about boxes.
     ///
     /// As a Swift package it comes from the package's resources. If you vendor these files into
     /// an app instead, add `SnagIcon.png` to the app's asset catalog as an image set named "SnagIcon".
@@ -20,7 +20,7 @@ extension SnagReporter {
         return NSImage(size: NSSize(width: 16, height: 16))
     }
 
-    /// A ready-made “Report an Issue…” menu item with the Snag icon. Add it to your Help menu:
+    /// A ready-made “Report an Issue…” menu item with the SnagFrog icon. Add it to your Help menu:
     ///
     /// ```swift
     /// NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
@@ -65,7 +65,7 @@ final class SnagMenuTarget: NSObject {
     }
 }
 
-/// A small floating panel with the Snag icon and a spinner, shown while logs upload.
+/// A small floating panel with the SnagFrog icon and a spinner, shown while logs upload.
 @MainActor
 final class SnagProgressPanel {
     private let panel: NSPanel
