@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -17,6 +18,14 @@ public struct SnagReporter: Sendable {
     public let baseURL: URL
     /// Only the tail of each log file is sent.
     public var maxLogBytes: Int = 512 * 1024
+
+    /// The server accepts at most this many files per session (snapshot included).
+    public static let maxFiles = 4
+    /// Raw bytes across all files. Base64 grows this by a third, which keeps the request under
+    /// Netlify's 6 MB body limit.
+    public static let maxTotalBytes = 4_400_000
+    /// The server's per-file limit.
+    public static let maxFileBytes = 4 * 1024 * 1024
     public var session: URLSession
 
     public init(appSlug: String, publicKey: String, baseURL: URL, session: URLSession = .shared) {
@@ -38,11 +47,10 @@ public struct SnagReporter: Sendable {
         showsProgress: Bool = true
     ) async -> URL {
         let diagnostics = Self.defaultDiagnostics().merging(extraDiagnostics) { _, new in new }
-        var attachments = logFiles.compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        let logs = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
         // Snapshot first, so the progress panel is never part of it.
-        if includeWindowSnapshot, let snapshot = Self.keyWindowSnapshot() {
-            attachments.append(snapshot)
-        }
+        let snapshot = includeWindowSnapshot ? Self.keyWindowSnapshot() : nil
+        let attachments = Self.fitForUpload(logs: logs, snapshot: snapshot)
 
         #if canImport(AppKit)
         let progress = showsProgress ? SnagProgressPanel.show() : nil
@@ -52,6 +60,10 @@ public struct SnagReporter: Sendable {
         do {
             url = try await createSession(diagnostics: diagnostics, files: attachments)
         } catch {
+            Self.log.error("SnagFrog session upload failed, opening the plain report page: \(String(describing: error), privacy: .public)")
+            #if DEBUG
+            print("[SnagReporter] session upload failed: \(error)")
+            #endif
             url = reportPageURL(diagnostics: diagnostics)
         }
         #if canImport(AppKit)
@@ -59,6 +71,56 @@ public struct SnagReporter: Sendable {
         NSWorkspace.shared.open(url)
         #endif
         return url
+    }
+
+    static let log = Logger(subsystem: "com.snagfrog.SnagReporter", category: "upload")
+
+    /// Orders log files newest first (by modification date), so the oldest are dropped first.
+    static func newestFirst(_ files: [URL]) -> [URL] {
+        let dated = files.enumerated().map { index, url in
+            (index, url, (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
+        }
+        return dated.sorted { a, b in
+            switch (a.2, b.2) {
+            case let (x?, y?) where x != y: return x > y
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return a.0 < b.0
+            }
+        }.map { $0.1 }
+    }
+
+    /// Trims attachments to what the server accepts: at most `maxFiles` files including the
+    /// snapshot, and `maxTotalBytes` in total. The snapshot is kept; logs past the file limit are
+    /// dropped (they come in priority order, newest first), and the rest share the remaining
+    /// budget, each keeping the tail of its log.
+    static func fitForUpload(
+        logs: [Attachment],
+        snapshot: Attachment?,
+        maxFiles: Int = maxFiles,
+        maxTotalBytes: Int = maxTotalBytes,
+        maxFileBytes: Int = maxFileBytes
+    ) -> [Attachment] {
+        let snap = snapshot.flatMap { $0.data.count <= min(maxFileBytes, maxTotalBytes) ? $0 : nil }
+        var budget = maxTotalBytes - (snap?.data.count ?? 0)
+        let kept = Array(logs.prefix(max(0, maxFiles - (snap == nil ? 0 : 1))))
+
+        // Smallest first, so short logs keep everything and long ones split what's left.
+        var sized = [Int: Attachment]()
+        let order = kept.indices.sorted { kept[$0].data.count < kept[$1].data.count }
+        for (n, i) in order.enumerated() {
+            let share = budget / (order.count - n)
+            let limit = min(share, maxFileBytes)
+            let log = kept[i]
+            let trimmed = log.data.count <= limit
+                ? log
+                : Attachment(filename: log.filename, contentType: log.contentType, data: Data(log.data.suffix(limit)))
+            budget -= trimmed.data.count
+            if !trimmed.data.isEmpty || log.data.isEmpty { sized[i] = trimmed }
+        }
+        var result = kept.indices.compactMap { sized[$0] }
+        if let snap { result.append(snap) }
+        return result
     }
 
     /// Uploads context and returns the report page URL bound to it.
@@ -132,7 +194,9 @@ public struct SnagReporter: Sendable {
     @MainActor
     static func keyWindowSnapshot() -> Attachment? {
         #if canImport(AppKit)
-        guard let view = (NSApp.keyWindow ?? NSApp.mainWindow)?.contentView,
+        // NSApp is nil (and force-unwrapped) outside an NSApplication, e.g. in a command-line tool.
+        guard let app = NSApp,
+              let view = (app.keyWindow ?? app.mainWindow)?.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
         view.cacheDisplay(in: view.bounds, to: rep)
         guard let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return nil }

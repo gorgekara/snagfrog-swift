@@ -56,6 +56,32 @@ final class SnagReporterTests: XCTestCase {
         XCTAssertTrue(d["os_version"]?.hasPrefix("macOS ") ?? false)
         XCTAssertNotNil(d["arch"])
     }
+
+    private func blob(_ name: String, _ bytes: Int, type: String = "text/plain") -> Attachment {
+        Attachment(filename: name, contentType: type, data: Data(repeating: 65, count: bytes))
+    }
+
+    func testFitForUploadKeepsSnapshotAndCapsFileCount() {
+        let logs = (1...6).map { blob("log\($0).log", 100) }
+        let snapshot = blob("window.jpg", 50, type: "image/jpeg")
+        let fitted = SnagReporter.fitForUpload(logs: logs, snapshot: snapshot)
+        XCTAssertEqual(fitted.map(\.filename), ["log1.log", "log2.log", "log3.log", "window.jpg"])
+    }
+
+    func testFitForUploadShrinksLogsToTheTotalBudget() {
+        let logs = [blob("big.log", 3_000), blob("small.log", 100), blob("huge.log", 5_000)]
+        let snapshot = blob("window.jpg", 1_000, type: "image/jpeg")
+        let fitted = SnagReporter.fitForUpload(logs: logs, snapshot: snapshot, maxTotalBytes: 4_000)
+        XCTAssertEqual(fitted.map(\.filename), ["big.log", "small.log", "huge.log", "window.jpg"])
+        XCTAssertLessThanOrEqual(fitted.reduce(0) { $0 + $1.data.count }, 4_000)
+        XCTAssertEqual(fitted[1].data.count, 100, "short logs are kept whole")
+        XCTAssertEqual(fitted[3].data.count, 1_000, "the snapshot is never trimmed")
+    }
+
+    func testFitForUploadWithoutSnapshotUsesAllFourSlots() {
+        let logs = (1...5).map { blob("log\($0).log", 10) }
+        XCTAssertEqual(SnagReporter.fitForUpload(logs: logs, snapshot: nil).count, 4)
+    }
 }
 
 #if canImport(AppKit)

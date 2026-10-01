@@ -118,7 +118,7 @@ final class SnagProgressPanel {
         panel.contentView = background
 
         // Centre over the app's window if there is one, otherwise over the main screen.
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+        if let app = NSApp, let window = app.keyWindow ?? app.mainWindow {
             let frame = window.frame
             panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2))
         } else {
