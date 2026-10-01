@@ -8,7 +8,7 @@ import AppKit
 ///
 /// ```swift
 /// let snag = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_…",
-///                         baseURL: URL(string: "https://snag.example.com")!)
+///                         baseURL: URL(string: "https://snagfrog.com")!)
 /// Task { await snag.report(logFiles: [logURL]) }
 /// ```
 public struct SnagReporter: Sendable {
