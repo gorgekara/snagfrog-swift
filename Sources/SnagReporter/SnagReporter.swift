@@ -28,18 +28,25 @@ public struct SnagReporter: Sendable {
 
     /// Collects context, uploads it, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
+    /// - Parameter showsProgress: show a small Snag panel while logs upload.
     @MainActor
     @discardableResult
     public func report(
         logFiles: [URL] = [],
         extraDiagnostics: [String: String] = [:],
-        includeWindowSnapshot: Bool = true
+        includeWindowSnapshot: Bool = true,
+        showsProgress: Bool = true
     ) async -> URL {
         let diagnostics = Self.defaultDiagnostics().merging(extraDiagnostics) { _, new in new }
         var attachments = logFiles.compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        // Snapshot first, so the progress panel is never part of it.
         if includeWindowSnapshot, let snapshot = Self.keyWindowSnapshot() {
             attachments.append(snapshot)
         }
+
+        #if canImport(AppKit)
+        let progress = showsProgress ? SnagProgressPanel.show() : nil
+        #endif
 
         let url: URL
         do {
@@ -48,6 +55,7 @@ public struct SnagReporter: Sendable {
             url = reportPageURL(diagnostics: diagnostics)
         }
         #if canImport(AppKit)
+        progress?.close()
         NSWorkspace.shared.open(url)
         #endif
         return url

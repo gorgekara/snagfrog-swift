@@ -57,3 +57,26 @@ final class SnagReporterTests: XCTestCase {
         XCTAssertNotNil(d["arch"])
     }
 }
+
+#if canImport(AppKit)
+import AppKit
+
+final class SnagReporterUITests: XCTestCase {
+    func testBundledIconLoads() {
+        let icon = SnagReporter.icon
+        XCTAssertGreaterThan(icon.representations.first?.pixelsWide ?? 0, 128, "icon should be the bundled high-res PNG")
+        XCTAssertEqual(SnagReporter.icon(size: 16).size, NSSize(width: 16, height: 16))
+    }
+
+    @MainActor
+    func testMenuItemHasIconTitleAndLiveTarget() throws {
+        let reporter = SnagReporter(appSlug: "hourslip", publicKey: "k", baseURL: URL(string: "https://snag.example.com")!)
+        let item = reporter.menuItem(logFiles: { [] })
+        XCTAssertEqual(item.title, "Report an Issue…")
+        XCTAssertEqual(item.image?.size, NSSize(width: 16, height: 16))
+        XCTAssertNotNil(item.target, "target must stay alive (NSMenuItem.target is weak)")
+        XCTAssertTrue(item.target?.responds(to: item.action!) ?? false)
+        XCTAssertEqual(reporter.menuItem(title: "Send Feedback…").title, "Send Feedback…")
+    }
+}
+#endif
