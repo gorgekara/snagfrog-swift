@@ -1,0 +1,188 @@
+import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
+
+/// Opens your app's Snag report page in the browser, after uploading logs,
+/// diagnostics and (optionally) a snapshot of the key window.
+///
+/// ```swift
+/// let snag = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_…",
+///                         baseURL: URL(string: "https://snag.example.com")!)
+/// Task { await snag.report(logFiles: [logURL]) }
+/// ```
+public struct SnagReporter: Sendable {
+    public let appSlug: String
+    public let publicKey: String
+    public let baseURL: URL
+    /// Only the tail of each log file is sent.
+    public var maxLogBytes: Int = 512 * 1024
+    public var session: URLSession
+
+    public init(appSlug: String, publicKey: String, baseURL: URL, session: URLSession = .shared) {
+        self.appSlug = appSlug
+        self.publicKey = publicKey
+        self.baseURL = baseURL
+        self.session = session
+    }
+
+    /// Collects context, uploads it, and opens the report page.
+    /// If the upload fails, the page still opens with diagnostics in the URL.
+    @MainActor
+    @discardableResult
+    public func report(
+        logFiles: [URL] = [],
+        extraDiagnostics: [String: String] = [:],
+        includeWindowSnapshot: Bool = true
+    ) async -> URL {
+        let diagnostics = Self.defaultDiagnostics().merging(extraDiagnostics) { _, new in new }
+        var attachments = logFiles.compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        if includeWindowSnapshot, let snapshot = Self.keyWindowSnapshot() {
+            attachments.append(snapshot)
+        }
+
+        let url: URL
+        do {
+            url = try await createSession(diagnostics: diagnostics, files: attachments)
+        } catch {
+            url = reportPageURL(diagnostics: diagnostics)
+        }
+        #if canImport(AppKit)
+        NSWorkspace.shared.open(url)
+        #endif
+        return url
+    }
+
+    /// Uploads context and returns the report page URL bound to it.
+    public func createSession(diagnostics: [String: String], files: [Attachment]) async throws -> URL {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/v1/sessions"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 20
+        request.setValue("Bearer \(publicKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(SessionRequest(diagnostics: diagnostics, files: files))
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw SnagError.server((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        let decoded = try JSONDecoder().decode(SessionResponse.self, from: data)
+        guard let url = URL(string: decoded.url) else { throw SnagError.invalidResponse }
+        return url
+    }
+
+    /// The plain report page with diagnostics as query parameters. Needs no network call.
+    public func reportPageURL(diagnostics: [String: String] = [:]) -> URL {
+        let shortKeys = ["app_version": "v", "build": "build", "os_version": "os",
+                         "device_model": "model", "arch": "arch", "locale": "locale"]
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("r").appendingPathComponent(appSlug),
+            resolvingAgainstBaseURL: false
+        )!
+        let items = diagnostics.sorted { $0.key < $1.key }.map { key, value in
+            URLQueryItem(name: shortKeys[key] ?? "d_\(key)", value: value)
+        }
+        components.queryItems = items.isEmpty ? nil : items
+        return components.url!
+    }
+
+    public static func defaultDiagnostics(bundle: Bundle = .main) -> [String: String] {
+        var d: [String: String] = [:]
+        let info = bundle.infoDictionary ?? [:]
+        d["app_version"] = info["CFBundleShortVersionString"] as? String
+        d["build"] = info["CFBundleVersion"] as? String
+        d["bundle_id"] = bundle.bundleIdentifier
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        d["os_version"] = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+        d["device_model"] = sysctlString("hw.model")
+        #if arch(arm64)
+        d["arch"] = "arm64"
+        #elseif arch(x86_64)
+        d["arch"] = ProcessInfo.processInfo.isTranslated ? "x86_64 (Rosetta)" : "x86_64"
+        #endif
+        d["locale"] = Locale.current.identifier
+        d["memory_gb"] = String(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        return d.compactMapValues { $0 }
+    }
+
+    /// Reads at most `maxBytes` from the end of a file.
+    public static func tail(of file: URL, maxBytes: Int) -> Attachment? {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
+        do {
+            try handle.seek(toOffset: start)
+            let data = try handle.readToEnd() ?? Data()
+            let name = file.pathExtension.isEmpty ? "\(file.lastPathComponent).log" : file.lastPathComponent
+            return Attachment(filename: name, contentType: "text/plain", data: data)
+        } catch {
+            return nil
+        }
+    }
+
+    @MainActor
+    static func keyWindowSnapshot() -> Attachment? {
+        #if canImport(AppKit)
+        guard let view = (NSApp.keyWindow ?? NSApp.mainWindow)?.contentView,
+              let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        guard let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return nil }
+        return Attachment(filename: "window.jpg", contentType: "image/jpeg", data: jpeg)
+        #else
+        return nil
+        #endif
+    }
+
+    private static func sysctlString(_ name: String) -> String? {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
+        return String(cString: buffer)
+    }
+}
+
+public struct Attachment: Sendable, Encodable, Equatable {
+    public let filename: String
+    public let contentType: String
+    public let data: Data
+
+    public init(filename: String, contentType: String, data: Data) {
+        self.filename = filename
+        self.contentType = contentType
+        self.data = data
+    }
+
+    enum CodingKeys: String, CodingKey { case filename, contentType, data }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(filename, forKey: .filename)
+        try c.encode(contentType, forKey: .contentType)
+        try c.encode(data.base64EncodedString(), forKey: .data)
+    }
+}
+
+public enum SnagError: Error, Equatable {
+    case server(Int)
+    case invalidResponse
+}
+
+struct SessionRequest: Encodable {
+    let diagnostics: [String: String]
+    let files: [Attachment]
+}
+
+struct SessionResponse: Decodable {
+    let token: String
+    let url: String
+}
+
+private extension ProcessInfo {
+    var isTranslated: Bool {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        return sysctlbyname("sysctl.proc_translated", &value, &size, nil, 0) == 0 && value == 1
+    }
+}
