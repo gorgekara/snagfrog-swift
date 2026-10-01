@@ -3,12 +3,21 @@ import AppKit
 
 extension SnagReporter {
     /// The Snag app icon (the frog), for menus, buttons and about boxes.
+    ///
+    /// As a Swift package it comes from the package's resources. If you vendor these files into
+    /// an app instead, add `SnagIcon.png` to the app's asset catalog as an image set named "SnagIcon".
     public static var icon: NSImage {
-        guard
-            let url = Bundle.module.url(forResource: "SnagIcon", withExtension: "png"),
-            let image = NSImage(contentsOf: url)
-        else { return NSImage(size: NSSize(width: 16, height: 16)) }
-        return image
+        #if SWIFT_PACKAGE
+        if let url = Bundle.module.url(forResource: "SnagIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        #else
+        if let image = NSImage(named: "SnagIcon") {
+            return image
+        }
+        #endif
+        return NSImage(size: NSSize(width: 16, height: 16))
     }
 
     /// A ready-made “Report an Issue…” menu item with the Snag icon. Add it to your Help menu:
