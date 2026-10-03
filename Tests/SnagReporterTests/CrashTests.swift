@@ -71,6 +71,15 @@ final class CrashTests: XCTestCase {
         XCTAssertNotNil(context.diagnostics["crash_time"])
     }
 
+    func testReadsAFileWithTheSystemProfileMacOSAppends() throws {
+        let body = "{\n  \"procName\" : \"MyApp\",\n  \"exception\" : {\"type\":\"EXC_CRASH\",\"signal\":\"SIGSEGV\"},\n  \"threads\" : [\n    {\"id\":1}\n  ]\n}"
+        let header = #"{"app_name":"MyApp","bug_type":"309"}"#
+        let profile = "\n\nSystem Profile:\nNetwork Service: Wi-Fi, AirPort, en0\nGraphics: Apple M5 Pro {built-in}\n}\nModel: Mac17,9\n"
+        try write("MyApp-2026-10-03-141900.ips", header + "\n" + body + profile)
+        let crash = try XCTUnwrap(SnagReporter.latestCrash(processName: "MyApp", in: dir))
+        XCTAssertEqual(crash.summary, "EXC_CRASH (SIGSEGV)")
+    }
+
     func testIsNewCrash() {
         let now = Date()
         let crash = CrashReport(file: URL(fileURLWithPath: "/x.ips"), date: now.addingTimeInterval(-3600), summary: nil)

@@ -68,13 +68,30 @@ extension SnagReporter {
             let summary = line.map { $0.dropFirst("Exception Type:".count).trimmingCharacters(in: .whitespaces) }
             return (nil, nil, summary?.isEmpty == false ? summary : nil)
         }
-        let body = try? JSONSerialization.jsonObject(with: data[data.index(after: newline)...]) as? [String: Any]
+        let body = parseBody(data[data.index(after: newline)...])
         let exception = body?["exception"] as? [String: Any]
         var summary = exception?["type"] as? String
         if let signal = exception?["signal"] as? String {
             summary = summary.map { "\($0) (\(signal))" } ?? signal
         }
         return (header["app_name"] as? String ?? header["name"] as? String, header["bug_type"] as? String, summary)
+    }
+
+    /// The JSON body of an `.ips` file. macOS appends a plain-text "System Profile:" section
+    /// after it, so when the whole text is not JSON, the body is taken to end at a closing brace
+    /// at the start of a line (the body is pretty-printed, so only its own closing brace sits there).
+    static func parseBody(_ data: Data) -> [String: Any]? {
+        if let whole = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return whole }
+        let text = String(decoding: data, as: UTF8.self)
+        var searchEnd = text.endIndex
+        for _ in 0..<20 {
+            guard let close = text.range(of: "\n}", options: .backwards, range: text.startIndex..<searchEnd) else { return nil }
+            if let body = try? JSONSerialization.jsonObject(with: Data(text[..<close.upperBound].utf8)) as? [String: Any] {
+                return body
+            }
+            searchEnd = close.lowerBound
+        }
+        return nil
     }
 
     /// Reads at most `maxBytes` from the start of a file.
