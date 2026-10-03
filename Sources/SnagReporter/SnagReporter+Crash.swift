@@ -132,7 +132,10 @@ extension SnagReporter {
         alert.icon = Self.icon(size: 64)
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
 
-        await report(logFiles: logFiles, extraDiagnostics: ["crash_prompt": "yes"], includeWindowSnapshot: false)
+        await report(
+            logFiles: logFiles, extraDiagnostics: ["crash_prompt": "yes"],
+            includeWindowSnapshot: false, includeCrashReport: true
+        )
         return true
     }
     #endif
