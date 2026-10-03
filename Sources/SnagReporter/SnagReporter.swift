@@ -37,17 +37,28 @@ public struct SnagReporter: Sendable {
 
     /// Collects context, uploads it, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
-    /// - Parameter showsProgress: show a small SnagFrog panel while logs upload.
+    /// - Parameters:
+    ///   - includeCrashReport: attach the app's newest crash report from the last 7 days, if macOS
+    ///     wrote one and the app can read it (not in the App Sandbox).
+    ///   - showsProgress: show a small SnagFrog panel while logs upload.
     @MainActor
     @discardableResult
     public func report(
         logFiles: [URL] = [],
         extraDiagnostics: [String: String] = [:],
         includeWindowSnapshot: Bool = true,
+        includeCrashReport: Bool = true,
         showsProgress: Bool = true
     ) async -> URL {
-        let diagnostics = Self.defaultDiagnostics().merging(extraDiagnostics) { _, new in new }
-        let logs = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        var diagnostics = Self.defaultDiagnostics()
+        var logs = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        // A recent crash report goes first, so it survives when logs are dropped to fit.
+        if includeCrashReport, let crash = Self.latestCrash() {
+            let context = Self.crashContext(crash)
+            diagnostics.merge(context.diagnostics) { _, new in new }
+            if let attachment = context.attachment { logs.insert(attachment, at: 0) }
+        }
+        diagnostics.merge(extraDiagnostics) { _, new in new }
         // Snapshot first, so the progress panel is never part of it.
         let snapshot = includeWindowSnapshot ? Self.keyWindowSnapshot() : nil
         let attachments = Self.fitForUpload(logs: logs, snapshot: snapshot)

@@ -15,7 +15,7 @@ https://github.com/gorgekara/snagfrog-swift
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.1.0")
+.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.2.0")
 ```
 
 Requires macOS 12 or later.
@@ -41,12 +41,31 @@ Task { await snag.report(logFiles: [logFileURL]) }
 While logs upload, a small panel shows "Preparing your report…" (pass `showsProgress: false` to
 hide it). `SnagReporter.icon` and `SnagReporter.icon(size:)` give you the icon for your own buttons.
 
+## After a crash
+
+If macOS wrote a crash report for your app in the last 7 days, `report()` attaches it and marks
+the report as a crash in your SnagFrog inbox (`includeCrashReport: false` to skip it).
+
+To ask people right after a crash, call this once at launch:
+
+```swift
+Task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+```
+
+If the app crashed since the last launch, it shows "YourApp quit unexpectedly. Would you like to
+send a report?" once per crash, and opens the report page with the crash log attached.
+
+Nothing is sent on its own: the person chooses to report and sees what is attached. Apps in the
+App Sandbox (Mac App Store builds) cannot read macOS crash reports, so there both features do
+nothing and reports work as usual.
+
 ## What gets sent
 
 - The last 512 KB of each log file (`maxLogBytes`). At most 4 files go up, including the window
   snapshot, and the total stays under about 4.4 MB: the oldest logs are dropped or trimmed first.
 - Diagnostics: app version and build, macOS version, model, architecture, locale and memory.
   Add your own with `extraDiagnostics:`.
+- The app's newest crash report (`.ips`) from the last 7 days, if there is one.
 - A JPEG of the key window (`includeWindowSnapshot: false` to skip it).
 
 If the upload fails, the report page still opens, with the diagnostics in the URL.
