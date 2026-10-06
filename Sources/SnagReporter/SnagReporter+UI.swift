@@ -26,13 +26,16 @@ extension SnagReporter {
     /// NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
     /// ```
     ///
-    /// - Parameter logFiles: evaluated when the item is chosen, so it can return the current logs.
+    /// - Parameters:
+    ///   - logFiles: evaluated when the item is chosen, so it can return the current logs.
+    ///   - unifiedLog: also attach the app's unified log (see ``UnifiedLog``), e.g. `.app`.
     @MainActor
     public func menuItem(
         title: String = "Report an Issue…",
-        logFiles: @escaping @MainActor () -> [URL] = { [] }
+        logFiles: @escaping @MainActor () -> [URL] = { [] },
+        unifiedLog: UnifiedLog? = nil
     ) -> NSMenuItem {
-        let target = SnagMenuTarget(reporter: self, logFiles: logFiles)
+        let target = SnagMenuTarget(reporter: self, logFiles: logFiles, unifiedLog: unifiedLog)
         let item = NSMenuItem(title: title, action: #selector(SnagMenuTarget.report(_:)), keyEquivalent: "")
         item.target = target
         // NSMenuItem.target is weak; the item keeps its target alive this way.
@@ -53,15 +56,17 @@ extension SnagReporter {
 final class SnagMenuTarget: NSObject {
     let reporter: SnagReporter
     let logFiles: @MainActor () -> [URL]
+    let unifiedLog: SnagReporter.UnifiedLog?
 
-    init(reporter: SnagReporter, logFiles: @escaping @MainActor () -> [URL]) {
+    init(reporter: SnagReporter, logFiles: @escaping @MainActor () -> [URL], unifiedLog: SnagReporter.UnifiedLog? = nil) {
         self.reporter = reporter
         self.logFiles = logFiles
+        self.unifiedLog = unifiedLog
     }
 
     @objc func report(_ sender: Any?) {
         let files = logFiles()
-        Task { await reporter.report(logFiles: files) }
+        Task { await reporter.report(logFiles: files, unifiedLog: unifiedLog) }
     }
 }
 

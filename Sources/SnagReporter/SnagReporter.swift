@@ -38,6 +38,9 @@ public struct SnagReporter: Sendable {
     /// Collects context, uploads it, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
     /// - Parameters:
+    ///   - unifiedLog: also attach what the app wrote to macOS's unified log (`Logger`, `os_log`),
+    ///     for apps without a log file. `.app` takes the app's own entries from the last
+    ///     15 minutes. Off unless asked for.
     ///   - includeCrashReport: attach the app's newest crash report from the last 7 days, if macOS
     ///     wrote one and the app can read it (not in the App Sandbox).
     ///   - showsProgress: show a small SnagFrog panel while logs upload.
@@ -45,27 +48,42 @@ public struct SnagReporter: Sendable {
     @discardableResult
     public func report(
         logFiles: [URL] = [],
+        unifiedLog: UnifiedLog? = nil,
         extraDiagnostics: [String: String] = [:],
         includeWindowSnapshot: Bool = true,
         includeCrashReport: Bool = true,
         showsProgress: Bool = true
     ) async -> URL {
         var diagnostics = Self.defaultDiagnostics()
-        var logs = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
-        // A recent crash report goes first, so it survives when logs are dropped to fit.
+        let files = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
+        var crashFile: Attachment?
         if includeCrashReport, let crash = Self.latestCrash() {
             let context = Self.crashContext(crash)
             diagnostics.merge(context.diagnostics) { _, new in new }
-            if let attachment = context.attachment { logs.insert(attachment, at: 0) }
+            crashFile = context.attachment
         }
         diagnostics.merge(extraDiagnostics) { _, new in new }
         // Snapshot first, so the progress panel is never part of it.
         let snapshot = includeWindowSnapshot ? Self.keyWindowSnapshot() : nil
-        let attachments = Self.fitForUpload(logs: logs, snapshot: snapshot)
 
         #if canImport(AppKit)
         let progress = showsProgress ? SnagProgressPanel.show() : nil
         #endif
+
+        // Reading the unified log can take a moment in an app that logs a lot, so it happens off
+        // the main thread, with the progress panel already up.
+        var systemLog: Attachment?
+        if let unifiedLog {
+            let bundleID = Bundle.main.bundleIdentifier
+            let maxBytes = maxLogBytes
+            systemLog = await Task.detached(priority: .userInitiated) {
+                Self.unifiedLogAttachment(unifiedLog, bundleID: bundleID, maxBytes: maxBytes)
+            }.value
+        }
+        let attachments = Self.fitForUpload(
+            logs: Self.assemble(crash: crashFile, unifiedLog: systemLog, files: files),
+            snapshot: snapshot
+        )
 
         let url: URL
         do {
