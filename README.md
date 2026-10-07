@@ -125,6 +125,9 @@ nothing and reports work as usual.
 - The app's newest crash report (`.ips`) from the last 7 days, if there is one.
 - A JPEG of the key window (`includeWindowSnapshot: false` to skip it).
 
+In logs, crash reports and details, the person's home folder is replaced with `~`
+(`/Users/ana/Library/…` becomes `~/Library/…`), so paths stay useful without naming the account.
+
 All of it is shown in the review window first, and only what the person keeps is uploaded.
 If the upload fails, the report page still opens, with the diagnostics in the URL.
 

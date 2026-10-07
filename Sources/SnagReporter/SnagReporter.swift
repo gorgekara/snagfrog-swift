@@ -70,6 +70,8 @@ public struct SnagReporter: Sendable {
             crashFile = context.attachment
         }
         diagnostics.merge(extraDiagnostics) { _, new in new }
+        // Paths keep their meaning without the account name: the home folder becomes "~".
+        diagnostics = diagnostics.mapValues { Self.scrubHome($0) }
         // Snapshot first, so the progress panel is never part of it.
         let snapshot = includeWindowSnapshot ? Self.keyWindowSnapshot() : nil
 
@@ -90,7 +92,7 @@ public struct SnagReporter: Sendable {
             #endif
         }
         let attachments = Self.fitForUpload(
-            logs: Self.assemble(crash: crashFile, unifiedLog: systemLog, files: files),
+            logs: Self.assemble(crash: crashFile, unifiedLog: systemLog, files: files).map { Self.scrubHome($0) },
             snapshot: snapshot
         )
 

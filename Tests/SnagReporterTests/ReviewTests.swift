@@ -104,6 +104,29 @@ final class ReviewTests: XCTestCase {
         )
     }
 
+    func testHomeFolderBecomesATilde() {
+        let home = "/Users/ana"
+        XCTAssertEqual(SnagReporter.scrubHome("open /Users/ana/Library/Logs/app.log failed", home: home),
+                       "open ~/Library/Logs/app.log failed")
+        XCTAssertEqual(SnagReporter.scrubHome(#"{"path":"\/Users\/ana\/Apps\/Capta.app"}"#, home: home),
+                       #"{"path":"~\/Apps\/Capta.app"}"#, "crash reports escape their slashes")
+        XCTAssertEqual(SnagReporter.scrubHome("cwd=/Users/ana", home: home), "cwd=~")
+        XCTAssertEqual(SnagReporter.scrubHome("/Users/anabel/x and /Users/Shared/y", home: home),
+                       "/Users/anabel/x and /Users/Shared/y", "other folders are left alone")
+        XCTAssertEqual(SnagReporter.scrubHome("/Users/a.b (c)/x", home: "/Users/a.b (c)"), "~/x")
+    }
+
+    func testOnlyTextFilesAreScrubbed() {
+        let text = Attachment(filename: "app.log", contentType: "text/plain", data: Data("/Users/ana/x".utf8))
+        XCTAssertEqual(String(decoding: SnagReporter.scrubHome(text, home: "/Users/ana").data, as: UTF8.self), "~/x")
+        XCTAssertEqual(SnagReporter.scrubHome(snapshot, home: "/Users/ana"), snapshot)
+    }
+
+    func testHomeFolderIsTheRealOneNotAContainer() {
+        XCTAssertFalse(SnagReporter.homeFolder.contains("/Library/Containers/"))
+        XCTAssertTrue(SnagReporter.homeFolder.hasPrefix("/"))
+    }
+
     #if canImport(AppKit)
     @MainActor
     func testReviewWindowKeepsOnlyTickedFiles() {
