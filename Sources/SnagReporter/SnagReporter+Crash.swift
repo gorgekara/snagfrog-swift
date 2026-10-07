@@ -126,7 +126,7 @@ extension SnagReporter {
     /// Task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
     /// ```
     ///
-    /// - Returns: true if the user chose to send a report.
+    /// - Returns: true if the user chose to send a report and did not cancel its review.
     @MainActor
     @discardableResult
     public func offerReportAfterCrash(
@@ -149,11 +149,10 @@ extension SnagReporter {
         alert.icon = Self.icon(size: 64)
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
 
-        await report(
+        return await report(
             logFiles: logFiles, extraDiagnostics: ["crash_prompt": "yes"],
             includeWindowSnapshot: false, includeCrashReport: true
-        )
-        return true
+        ) != nil
     }
     #endif
 }

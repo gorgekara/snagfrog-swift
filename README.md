@@ -38,8 +38,15 @@ NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
 Task { await snag.report(logFiles: [logFileURL]) }
 ```
 
-While logs upload, a small panel shows "Preparing your report…" (pass `showsProgress: false` to
-hide it). `SnagReporter.icon` and `SnagReporter.icon(size:)` give you the icon for your own buttons.
+Before anything is uploaded, a review window lists what was collected: the details, and each file
+with a tick box and a Show button that displays exactly the bytes that would be sent. Nothing
+leaves the Mac until the person chooses Continue in Browser, unticked files are never sent, and
+Cancel sends nothing (`report()` then returns nil). Pass `reviewsBeforeUpload: false` only if your
+app has already shown the person what will be sent.
+
+While the upload runs, a small panel shows "Opening the report form…" (pass `showsProgress: false`
+to hide it). `SnagReporter.icon` and `SnagReporter.icon(size:)` give you the icon for your own
+buttons.
 
 ## No log file? Attach the unified log
 
@@ -99,9 +106,11 @@ Task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
 ```
 
 If the app crashed since the last launch, it shows "YourApp quit unexpectedly. Would you like to
-send a report?" once per crash, and opens the report page with the crash log attached.
+send a report?" once per crash. Choosing Send Report… opens the review window with the crash log
+listed; the report page opens once the person continues.
 
-Nothing is sent on its own: the person chooses to report and sees what is attached. Apps in the
+Nothing is sent on its own: the person chooses to report, and reads and approves what is attached
+before it is uploaded. Apps in the
 App Sandbox (Mac App Store builds) cannot read macOS crash reports, so there both features do
 nothing and reports work as usual.
 
@@ -116,6 +125,7 @@ nothing and reports work as usual.
 - The app's newest crash report (`.ips`) from the last 7 days, if there is one.
 - A JPEG of the key window (`includeWindowSnapshot: false` to skip it).
 
+All of it is shown in the review window first, and only what the person keeps is uploaded.
 If the upload fails, the report page still opens, with the diagnostics in the URL.
 
 The public key is publishable: all it can do is create capture sessions for that app. You can

@@ -4,8 +4,9 @@ import os
 import AppKit
 #endif
 
-/// Opens your app's SnagFrog report page in the browser, after uploading logs,
-/// diagnostics and (optionally) a snapshot of the key window.
+/// Opens your app's SnagFrog report page in the browser with logs, diagnostics and (optionally)
+/// a snapshot of the key window. The person reviews what was collected in a window first;
+/// nothing is uploaded until they continue.
 ///
 /// ```swift
 /// let snag = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_…",
@@ -35,15 +36,20 @@ public struct SnagReporter: Sendable {
         self.session = session
     }
 
-    /// Collects context, uploads it, and opens the report page.
+    /// Collects context, shows it for review, uploads what the person kept, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
     /// - Parameters:
+    ///   - reviewsBeforeUpload: show the review window first: the details and every file, each
+    ///     with a tick box and a way to read it. Nothing leaves the Mac until the person
+    ///     continues, and unticked files are never sent. Pass false only if your app has
+    ///     already shown the person what will be sent.
     ///   - unifiedLog: also attach what the app wrote to macOS's unified log (`Logger`, `os_log`),
     ///     for apps without a log file. `.app` takes the app's own entries from the last
     ///     15 minutes. Off unless asked for.
     ///   - includeCrashReport: attach the app's newest crash report from the last 7 days, if macOS
     ///     wrote one and the app can read it (not in the App Sandbox).
-    ///   - showsProgress: show a small SnagFrog panel while logs upload.
+    ///   - showsProgress: show a small SnagFrog panel while logs are read and uploaded.
+    /// - Returns: the report page that was opened, or nil if the person cancelled the review.
     @MainActor
     @discardableResult
     public func report(
@@ -52,8 +58,9 @@ public struct SnagReporter: Sendable {
         extraDiagnostics: [String: String] = [:],
         includeWindowSnapshot: Bool = true,
         includeCrashReport: Bool = true,
+        reviewsBeforeUpload: Bool = true,
         showsProgress: Bool = true
-    ) async -> URL {
+    ) async -> URL? {
         var diagnostics = Self.defaultDiagnostics()
         let files = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
         var crashFile: Attachment?
@@ -66,40 +73,73 @@ public struct SnagReporter: Sendable {
         // Snapshot first, so the progress panel is never part of it.
         let snapshot = includeWindowSnapshot ? Self.keyWindowSnapshot() : nil
 
-        #if canImport(AppKit)
-        let progress = showsProgress ? SnagProgressPanel.show() : nil
-        #endif
-
         // Reading the unified log can take a moment in an app that logs a lot, so it happens off
-        // the main thread, with the progress panel already up.
+        // the main thread, with the progress panel up.
         var systemLog: Attachment?
         if let unifiedLog {
+            #if canImport(AppKit)
+            let progress = showsProgress ? SnagProgressPanel.show() : nil
+            #endif
             let bundleID = Bundle.main.bundleIdentifier
             let maxBytes = maxLogBytes
             systemLog = await Task.detached(priority: .userInitiated) {
                 Self.unifiedLogAttachment(unifiedLog, bundleID: bundleID, maxBytes: maxBytes)
             }.value
+            #if canImport(AppKit)
+            progress?.close()
+            #endif
         }
         let attachments = Self.fitForUpload(
             logs: Self.assemble(crash: crashFile, unifiedLog: systemLog, files: files),
             snapshot: snapshot
         )
 
-        let url: URL
+        var review: Reviewer?
+        #if canImport(AppKit)
+        if reviewsBeforeUpload {
+            let destination = baseURL
+            review = { Self.reviewInWindow(diagnostics: $0, files: $1, destination: destination) }
+        }
+        #endif
+        guard let url = await submit(
+            diagnostics: diagnostics, files: attachments, showsProgress: showsProgress, review: review
+        ) else { return nil }
+        #if canImport(AppKit)
+        NSWorkspace.shared.open(url)
+        #endif
+        return url
+    }
+
+    /// Shows what was collected and returns the files to send, or nil to send nothing.
+    typealias Reviewer = @MainActor (_ diagnostics: [String: String], _ files: [Attachment]) -> [Attachment]?
+
+    /// Review first, then upload: no request is made until `review` returns, and only the files
+    /// it returns are uploaded. Returns the page to open, or nil if the review was cancelled.
+    @MainActor
+    func submit(
+        diagnostics: [String: String],
+        files: [Attachment],
+        showsProgress: Bool,
+        review: Reviewer?
+    ) async -> URL? {
+        var files = files
+        if let review {
+            guard let kept = review(diagnostics, files) else { return nil }
+            files = kept
+        }
+        #if canImport(AppKit)
+        let progress = showsProgress ? SnagProgressPanel.show(message: "Opening the report form…") : nil
+        defer { progress?.close() }
+        #endif
         do {
-            url = try await createSession(diagnostics: diagnostics, files: attachments)
+            return try await createSession(diagnostics: diagnostics, files: files)
         } catch {
             Self.log.error("SnagFrog session upload failed, opening the plain report page: \(String(describing: error), privacy: .public)")
             #if DEBUG
             print("[SnagReporter] session upload failed: \(error)")
             #endif
-            url = reportPageURL(diagnostics: diagnostics)
+            return reportPageURL(diagnostics: diagnostics)
         }
-        #if canImport(AppKit)
-        progress?.close()
-        NSWorkspace.shared.open(url)
-        #endif
-        return url
     }
 
     static let log = Logger(subsystem: "com.snagfrog.SnagReporter", category: "upload")
