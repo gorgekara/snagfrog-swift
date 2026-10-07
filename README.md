@@ -15,7 +15,7 @@ https://github.com/gorgekara/snagfrog-swift
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.3.0")
+.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.4.0")
 ```
 
 Requires macOS 12 or later.
@@ -38,7 +38,7 @@ NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
 Task { await snag.report(logFiles: [logFileURL]) }
 ```
 
-Before anything is uploaded, a review window lists what was collected: the details, and each file
+Since 0.4.0, before anything is uploaded, a review window lists what was collected: the details, and each file
 with a tick box and a Show button that displays exactly the bytes that would be sent. Nothing
 leaves the Mac until the person chooses Continue in Browser, unticked files are never sent, and
 Cancel sends nothing (`report()` then returns nil). Pass `reviewsBeforeUpload: false` only if your
