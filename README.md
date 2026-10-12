@@ -15,7 +15,7 @@ https://github.com/gorgekara/snagfrog-swift
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.4.0")
+.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.5.0")
 ```
 
 Requires macOS 12 or later.
