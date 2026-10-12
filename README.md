@@ -114,6 +114,24 @@ before it is uploaded. Apps in the
 App Sandbox (Mac App Store builds) cannot read macOS crash reports, so there both features do
 nothing and reports work as usual.
 
+## Reporting errors and crashes without asking
+
+Off unless you call it. These send to the app's **Errors** tab in SnagFrog, where identical errors
+are grouped and counted. Nothing is shown to the person using the app, and no name, email address
+or file is sent: only the message, the stack, the app version and the macOS version.
+
+```swift
+// At launch: if the app crashed since the last check, send the exception and the crashed thread.
+Task { await snag.sendCrashAutomatically() }
+
+// Anywhere: an error you caught.
+Task { try? await snag.send(error: "\(error)", context: ["screen": "export"]) }
+```
+
+Each crash is sent once, and the crash file itself is not uploaded. Use `offerReportAfterCrash`
+instead when you want to ask first. Because these send data without the person doing anything,
+only use them if your privacy policy says the app reports errors or crashes on its own.
+
 ## What gets sent
 
 - The last 512 KB of each log file (`maxLogBytes`). At most 4 files go up, including the window
