@@ -69,7 +69,7 @@ final class SnagReviewWindow: NSObject, NSWindowDelegate {
         let title = NSTextField(labelWithString: "Nothing has been sent yet")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
         let intro = Self.wrapping(
-            "\(appName) will send what is listed here to its developer through SnagFrog (\(host)). "
+            "\(appName) will send what is listed here to its developer through StareGlare (\(host)). "
                 + "Next, you describe the problem in your browser."
         )
         let heading = NSStackView(views: [title, intro])
