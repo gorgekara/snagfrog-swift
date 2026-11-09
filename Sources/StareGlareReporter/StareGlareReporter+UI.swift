@@ -1,19 +1,19 @@
 #if canImport(AppKit)
 import AppKit
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// The StareGlare app icon, for menus, buttons and about boxes.
     ///
     /// As a Swift package it comes from the package's resources. If you vendor these files into
-    /// an app instead, add `SnagIcon.png` to the app's asset catalog as an image set named "SnagIcon".
+    /// an app instead, add `StareGlareIcon.png` to the app's asset catalog as an image set named "StareGlareIcon".
     public static var icon: NSImage {
         #if SWIFT_PACKAGE
-        if let url = Bundle.module.url(forResource: "SnagIcon", withExtension: "png"),
+        if let url = Bundle.module.url(forResource: "StareGlareIcon", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             return image
         }
         #else
-        if let image = NSImage(named: "SnagIcon") {
+        if let image = NSImage(named: "StareGlareIcon") {
             return image
         }
         #endif
@@ -23,7 +23,7 @@ extension SnagReporter {
     /// A ready-made “Report an Issue…” menu item with the StareGlare icon. Add it to your Help menu:
     ///
     /// ```swift
-    /// NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
+    /// NSApp.helpMenu?.addItem(stareGlare.menuItem(logFiles: { [logFileURL] }))
     /// ```
     ///
     /// - Parameters:
@@ -35,8 +35,8 @@ extension SnagReporter {
         logFiles: @escaping @MainActor () -> [URL] = { [] },
         unifiedLog: UnifiedLog? = nil
     ) -> NSMenuItem {
-        let target = SnagMenuTarget(reporter: self, logFiles: logFiles, unifiedLog: unifiedLog)
-        let item = NSMenuItem(title: title, action: #selector(SnagMenuTarget.report(_:)), keyEquivalent: "")
+        let target = StareGlareMenuTarget(reporter: self, logFiles: logFiles, unifiedLog: unifiedLog)
+        let item = NSMenuItem(title: title, action: #selector(StareGlareMenuTarget.report(_:)), keyEquivalent: "")
         item.target = target
         // NSMenuItem.target is weak; the item keeps its target alive this way.
         item.representedObject = target
@@ -53,12 +53,12 @@ extension SnagReporter {
 }
 
 @MainActor
-final class SnagMenuTarget: NSObject {
-    let reporter: SnagReporter
+final class StareGlareMenuTarget: NSObject {
+    let reporter: StareGlareReporter
     let logFiles: @MainActor () -> [URL]
-    let unifiedLog: SnagReporter.UnifiedLog?
+    let unifiedLog: StareGlareReporter.UnifiedLog?
 
-    init(reporter: SnagReporter, logFiles: @escaping @MainActor () -> [URL], unifiedLog: SnagReporter.UnifiedLog? = nil) {
+    init(reporter: StareGlareReporter, logFiles: @escaping @MainActor () -> [URL], unifiedLog: StareGlareReporter.UnifiedLog? = nil) {
         self.reporter = reporter
         self.logFiles = logFiles
         self.unifiedLog = unifiedLog
@@ -72,14 +72,14 @@ final class SnagMenuTarget: NSObject {
 
 /// A small floating panel with the StareGlare icon and a spinner, shown while logs upload.
 @MainActor
-final class SnagProgressPanel {
+final class StareGlareProgressPanel {
     private let panel: NSPanel
 
     private init(panel: NSPanel) {
         self.panel = panel
     }
 
-    static func show(message: String = "Preparing your report…") -> SnagProgressPanel {
+    static func show(message: String = "Preparing your report…") -> StareGlareProgressPanel {
         let size = NSSize(width: 280, height: 64)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -103,7 +103,7 @@ final class SnagProgressPanel {
         background.layer?.cornerRadius = 14
         background.layer?.masksToBounds = true
 
-        let icon = NSImageView(image: SnagReporter.icon(size: 36))
+        let icon = NSImageView(image: StareGlareReporter.icon(size: 36))
         icon.frame = NSRect(x: 14, y: 14, width: 36, height: 36)
         icon.imageScaling = .scaleProportionallyUpOrDown
 
@@ -130,7 +130,7 @@ final class SnagProgressPanel {
             panel.center()
         }
         panel.orderFrontRegardless()
-        return SnagProgressPanel(panel: panel)
+        return StareGlareProgressPanel(panel: panel)
     }
 
     func close() {

@@ -1,13 +1,13 @@
 import Foundation
 import OSLog
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// Attaches what the app wrote to macOS's unified log (`Logger`, `os_log`) to a report, for
     /// apps that keep no log file of their own.
     ///
     /// ```swift
-    /// Task { await snag.report(unifiedLog: .app) }
-    /// NSApp.helpMenu?.addItem(snag.menuItem(unifiedLog: .app))
+    /// Task { await stareGlare.report(unifiedLog: .app) }
+    /// NSApp.helpMenu?.addItem(stareGlare.menuItem(unifiedLog: .app))
     /// ```
     ///
     /// Only this app's own process is read, and only since it was launched: macOS does not let an

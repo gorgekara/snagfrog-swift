@@ -1,9 +1,9 @@
 import XCTest
 import os
-@testable import SnagReporter
+@testable import StareGlareReporter
 
 final class UnifiedLogTests: XCTestCase {
-    typealias Line = SnagReporter.LogLine
+    typealias Line = StareGlareReporter.LogLine
     let utc = TimeZone(secondsFromGMT: 0)!
     let noon = Date(timeIntervalSince1970: 1_791_288_000) // 2026-10-06 12:00:00 UTC
 
@@ -15,7 +15,7 @@ final class UnifiedLogTests: XCTestCase {
     // MARK: Which entries are the app's
 
     func testByDefaultTakesTheAppsOwnSubsystemsAndUnlabelledEntries() {
-        let log = SnagReporter.UnifiedLog.app
+        let log = StareGlareReporter.UnifiedLog.app
         XCTAssertTrue(log.includes(subsystem: "com.acme.app", bundleID: "com.acme.app"))
         // A common convention: one subsystem per area, under the bundle identifier.
         XCTAssertTrue(log.includes(subsystem: "com.acme.app.network", bundleID: "com.acme.app"))
@@ -28,7 +28,7 @@ final class UnifiedLogTests: XCTestCase {
     }
 
     func testNamedSubsystemsReplaceTheBundleIdentifier() {
-        let log = SnagReporter.UnifiedLog(subsystems: ["com.acme.core", "sync"], includesUnlabeled: false)
+        let log = StareGlareReporter.UnifiedLog(subsystems: ["com.acme.core", "sync"], includesUnlabeled: false)
         XCTAssertTrue(log.includes(subsystem: "com.acme.core", bundleID: "com.acme.app"))
         XCTAssertTrue(log.includes(subsystem: "com.acme.core.db", bundleID: "com.acme.app"))
         XCTAssertTrue(log.includes(subsystem: "sync", bundleID: "com.acme.app"))
@@ -38,20 +38,20 @@ final class UnifiedLogTests: XCTestCase {
 
     func testWithoutABundleIdentifierTakesEverythingThatIsNotApples() {
         // A command-line tool has no bundle identifier.
-        let log = SnagReporter.UnifiedLog.app
+        let log = StareGlareReporter.UnifiedLog.app
         XCTAssertTrue(log.includes(subsystem: "com.acme.tool", bundleID: nil))
         XCTAssertFalse(log.includes(subsystem: "com.apple.network", bundleID: nil))
     }
 
     func testDefaultsToTheLastFifteenMinutes() {
-        XCTAssertEqual(SnagReporter.UnifiedLog.app.duration, 15 * 60)
-        XCTAssertEqual(SnagReporter.UnifiedLog(last: 60).duration, 60)
+        XCTAssertEqual(StareGlareReporter.UnifiedLog.app.duration, 15 * 60)
+        XCTAssertEqual(StareGlareReporter.UnifiedLog(last: 60).duration, 60)
     }
 
     // MARK: The text that is attached
 
     func testRendersOneEntryPerLineWithTimeLevelAndSource() throws {
-        let data = try XCTUnwrap(SnagReporter.renderUnifiedLog([
+        let data = try XCTUnwrap(StareGlareReporter.renderUnifiedLog([
             line("Sync started"),
             line("Request failed: 503", "error", category: "network", secondsAfterNoon: 1.25),
             line("plain NSLog line", "notice", subsystem: "", category: "", secondsAfterNoon: 2)
@@ -65,12 +65,12 @@ final class UnifiedLogTests: XCTestCase {
     }
 
     func testNoEntriesMeansNoAttachment() {
-        XCTAssertNil(SnagReporter.renderUnifiedLog([], maxBytes: 1000, timeZone: utc))
+        XCTAssertNil(StareGlareReporter.renderUnifiedLog([], maxBytes: 1000, timeZone: utc))
     }
 
     func testKeepsTheNewestEntriesWhenOverTheLimitAndSaysHowManyWereLeftOut() throws {
         let lines = (0..<100).map { line("entry \($0)", secondsAfterNoon: TimeInterval($0)) }
-        let data = try XCTUnwrap(SnagReporter.renderUnifiedLog(lines, maxBytes: 400, timeZone: utc))
+        let data = try XCTUnwrap(StareGlareReporter.renderUnifiedLog(lines, maxBytes: 400, timeZone: utc))
         let text = String(decoding: data, as: UTF8.self)
         XCTAssertLessThanOrEqual(data.count, 400)
         XCTAssertTrue(text.hasSuffix("entry 99\n"))
@@ -83,50 +83,50 @@ final class UnifiedLogTests: XCTestCase {
     }
 
     func testAnEntryLongerThanTheLimitKeepsItsEnd() throws {
-        let data = try XCTUnwrap(SnagReporter.renderUnifiedLog([line(String(repeating: "x", count: 5000) + "END")], maxBytes: 200, timeZone: utc))
+        let data = try XCTUnwrap(StareGlareReporter.renderUnifiedLog([line(String(repeating: "x", count: 5000) + "END")], maxBytes: 200, timeZone: utc))
         XCTAssertLessThanOrEqual(data.count, 200)
         XCTAssertTrue(String(decoding: data, as: UTF8.self).hasSuffix("END\n"))
     }
 
     func testAMessageWithSeveralLinesStaysTogether() throws {
-        let data = try XCTUnwrap(SnagReporter.renderUnifiedLog([line("first\nsecond")], maxBytes: 1000, timeZone: utc))
+        let data = try XCTUnwrap(StareGlareReporter.renderUnifiedLog([line("first\nsecond")], maxBytes: 1000, timeZone: utc))
         XCTAssertTrue(String(decoding: data, as: UTF8.self).hasSuffix("[com.acme.app:sync] first\nsecond\n"))
     }
 
     func testLeavesOutEntriesThatAreNothingButHiddenValues() {
-        XCTAssertTrue(SnagReporter.isFullyRedacted("<private>"))
-        XCTAssertTrue(SnagReporter.isFullyRedacted("<private>, <private>"))
-        XCTAssertTrue(SnagReporter.isFullyRedacted(" <private>\n"))
-        XCTAssertFalse(SnagReporter.isFullyRedacted("Signed in as <private>"))
-        XCTAssertFalse(SnagReporter.isFullyRedacted("Sync started"))
-        XCTAssertFalse(SnagReporter.isFullyRedacted(""))
-        XCTAssertFalse(SnagReporter.isFullyRedacted("..."))
+        XCTAssertTrue(StareGlareReporter.isFullyRedacted("<private>"))
+        XCTAssertTrue(StareGlareReporter.isFullyRedacted("<private>, <private>"))
+        XCTAssertTrue(StareGlareReporter.isFullyRedacted(" <private>\n"))
+        XCTAssertFalse(StareGlareReporter.isFullyRedacted("Signed in as <private>"))
+        XCTAssertFalse(StareGlareReporter.isFullyRedacted("Sync started"))
+        XCTAssertFalse(StareGlareReporter.isFullyRedacted(""))
+        XCTAssertFalse(StareGlareReporter.isFullyRedacted("..."))
     }
 
     // MARK: Where it goes among the files
 
     func testTheCrashReportComesFirstThenTheUnifiedLogThenLogFiles() {
         let file = { (name: String) in Attachment(filename: name, contentType: "text/plain", data: Data([1])) }
-        let all = SnagReporter.assemble(crash: file("crash.ips"), unifiedLog: file("unified-log.log"), files: [file("a.log"), file("b.log")])
+        let all = StareGlareReporter.assemble(crash: file("crash.ips"), unifiedLog: file("unified-log.log"), files: [file("a.log"), file("b.log")])
         XCTAssertEqual(all.map(\.filename), ["crash.ips", "unified-log.log", "a.log", "b.log"])
-        XCTAssertEqual(SnagReporter.assemble(crash: nil, unifiedLog: nil, files: [file("a.log")]).map(\.filename), ["a.log"])
+        XCTAssertEqual(StareGlareReporter.assemble(crash: nil, unifiedLog: nil, files: [file("a.log")]).map(\.filename), ["a.log"])
     }
 
     // MARK: Reading the real log of this process
 
     func testReadsWhatThisProcessLoggedAndNothingElse() throws {
-        let subsystem = "com.snagfrog.tests.\(UUID().uuidString)"
+        let subsystem = "com.stareglare.tests.\(UUID().uuidString)"
         let marker = "marker-\(UUID().uuidString)"
         Logger(subsystem: subsystem, category: "probe").error("\(marker, privacy: .public)")
         // Nothing but a private value: macOS hands back "<private>", which is left out.
         Logger(subsystem: subsystem, category: "probe").error("\(marker)")
-        Logger(subsystem: "com.snagfrog.other.\(UUID().uuidString)", category: "probe").error("not-wanted-\(marker, privacy: .public)")
+        Logger(subsystem: "com.stareglare.other.\(UUID().uuidString)", category: "probe").error("not-wanted-\(marker, privacy: .public)")
 
-        let options = SnagReporter.UnifiedLog(subsystems: [subsystem], last: 60, includesUnlabeled: false)
+        let options = StareGlareReporter.UnifiedLog(subsystems: [subsystem], last: 60, includesUnlabeled: false)
         // The log is written asynchronously: give it a moment.
         var found: [Line] = []
         for _ in 0..<30 {
-            guard let lines = SnagReporter.unifiedLogLines(options, bundleID: nil) else {
+            guard let lines = StareGlareReporter.unifiedLogLines(options, bundleID: nil) else {
                 throw XCTSkip("The unified log cannot be read in this environment")
             }
             found = lines
@@ -143,32 +143,32 @@ final class UnifiedLogTests: XCTestCase {
         XCTAssertEqual(found.first?.subsystem, subsystem)
         XCTAssertEqual(found.first?.category, "probe")
 
-        let attachment = try XCTUnwrap(SnagReporter.unifiedLogAttachment(options, bundleID: nil, maxBytes: 10_000))
+        let attachment = try XCTUnwrap(StareGlareReporter.unifiedLogAttachment(options, bundleID: nil, maxBytes: 10_000))
         XCTAssertEqual(attachment.filename, "unified-log.log")
         XCTAssertEqual(attachment.contentType, "text/plain")
         XCTAssertTrue(String(decoding: attachment.data, as: UTF8.self).contains("[\(subsystem):probe] \(marker)"))
     }
 
     func testLeavesOutEntriesOlderThanTheWindow() throws {
-        let subsystem = "com.snagfrog.tests.\(UUID().uuidString)"
+        let subsystem = "com.stareglare.tests.\(UUID().uuidString)"
         Logger(subsystem: subsystem, category: "probe").error("old entry")
         Thread.sleep(forTimeInterval: 1.2)
-        let options = SnagReporter.UnifiedLog(subsystems: [subsystem], last: 0.5, includesUnlabeled: false)
-        guard let lines = SnagReporter.unifiedLogLines(options, bundleID: nil) else {
+        let options = StareGlareReporter.UnifiedLog(subsystems: [subsystem], last: 0.5, includesUnlabeled: false)
+        guard let lines = StareGlareReporter.unifiedLogLines(options, bundleID: nil) else {
             throw XCTSkip("The unified log cannot be read in this environment")
         }
         XCTAssertEqual(lines, [])
-        XCTAssertNil(SnagReporter.unifiedLogAttachment(options, bundleID: nil, maxBytes: 10_000))
+        XCTAssertNil(StareGlareReporter.unifiedLogAttachment(options, bundleID: nil, maxBytes: 10_000))
     }
 
     #if canImport(AppKit)
     @MainActor
     func testTheMenuItemCanBeAskedToAttachTheUnifiedLog() throws {
-        let reporter = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_test", baseURL: URL(string: "https://snag.example.com")!)
+        let reporter = StareGlareReporter(appSlug: "hourslip", publicKey: "stareglare_pk_test", baseURL: URL(string: "https://stareglare.example.com")!)
         let item = reporter.menuItem(unifiedLog: .app)
-        let target = try XCTUnwrap(item.target as? SnagMenuTarget)
+        let target = try XCTUnwrap(item.target as? StareGlareMenuTarget)
         XCTAssertEqual(target.unifiedLog, .app)
-        XCTAssertNil((reporter.menuItem().target as? SnagMenuTarget)?.unifiedLog)
+        XCTAssertNil((reporter.menuItem().target as? StareGlareMenuTarget)?.unifiedLog)
     }
     #endif
 }

@@ -1,4 +1,4 @@
-# SnagReporter for macOS and iOS
+# StareGlareReporter for macOS and iOS
 
 Let people report bugs from your Mac or iOS app to [StareGlare](https://stareglare.com). One call uploads
 your logs (files, or the app's entries in the unified log), standard diagnostics and a snapshot
@@ -16,27 +16,46 @@ https://github.com/gorgekara/snagfrog-swift
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.6.0")
+.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.7.0")
 ```
+
+and add the `StareGlareReporter` library to your target:
+
+```swift
+.target(name: "MyApp", dependencies: [
+    .product(name: "StareGlareReporter", package: "snagfrog-swift")
+])
+```
+
+### Renamed in 0.7.0
+
+The package used to be called `SnagReporter`. Since 0.7.0 the module and the main type are
+`StareGlareReporter`, and `SnagError` is `StareGlareError`. Apps that still add the
+`SnagReporter` library and write `import SnagReporter` and `SnagReporter(...)` keep building:
+that library re-exports `StareGlareReporter` and the old names are deprecated aliases, so Xcode
+offers the rename as a fix-it. Switch when convenient; the old library will be removed in a
+future major version. Updating keeps what the reporter remembered on the device: a crash that
+was already offered or sent is not asked about or sent again, and on iOS a crash recorded by the
+previous version is still reported on the first launch after the update.
 
 Requires macOS 12 or later, or iOS 15 or later. iOS setup is [below](#ios).
 
 ## Use
 
 ```swift
-import SnagReporter
+import StareGlareReporter
 
-let snag = SnagReporter(
+let stareGlare = StareGlareReporter(
     appSlug: "your-app",
-    publicKey: "snag_pk_…",                      // StareGlare dashboard → Apps → your app
+    publicKey: "stareglare_pk_…",                      // StareGlare dashboard → Apps → your app
     baseURL: URL(string: "https://stareglare.com")!
 )
 
 // Adds "Report an Issue…" with the StareGlare icon to the Help menu:
-NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
+NSApp.helpMenu?.addItem(stareGlare.menuItem(logFiles: { [logFileURL] }))
 
 // …or trigger it from your own UI:
-Task { await snag.report(logFiles: [logFileURL]) }
+Task { await stareGlare.report(logFiles: [logFileURL]) }
 ```
 
 Since 0.4.0, before anything is uploaded, a review window lists what was collected: the details, and each file
@@ -46,7 +65,7 @@ Cancel sends nothing (`report()` then returns nil). Pass `reviewsBeforeUpload: f
 app has already shown the person what will be sent.
 
 While the upload runs, a small panel shows "Opening the report form…" (pass `showsProgress: false`
-to hide it). `SnagReporter.icon` and `SnagReporter.icon(size:)` give you the icon for your own
+to hide it). `StareGlareReporter.icon` and `StareGlareReporter.icon(size:)` give you the icon for your own
 buttons.
 
 ## No log file? Attach the unified log
@@ -55,10 +74,10 @@ If your app logs with `Logger` or `os_log` and keeps no log file, ask for the un
 instead (0.3.0 or later). Nobody has to run `log show` or a sysdiagnose:
 
 ```swift
-NSApp.helpMenu?.addItem(snag.menuItem(unifiedLog: .app))
+NSApp.helpMenu?.addItem(stareGlare.menuItem(unifiedLog: .app))
 
 // …or from your own UI, with or without log files:
-Task { await snag.report(unifiedLog: .app) }
+Task { await stareGlare.report(unifiedLog: .app) }
 ```
 
 `.app` takes what your app logged in the last 15 minutes under its bundle identifier
@@ -66,12 +85,12 @@ Task { await snag.report(unifiedLog: .app) }
 which is how `Logger()` writes. To choose:
 
 ```swift
-let log = SnagReporter.UnifiedLog(
+let log = StareGlareReporter.UnifiedLog(
     subsystems: ["com.acme.core", "com.acme.sync"],  // instead of the bundle identifier
     last: 60 * 60,                                     // seconds to go back
     includesUnlabeled: false                           // leave out entries with no subsystem
 )
-Task { await snag.report(unifiedLog: log) }
+Task { await stareGlare.report(unifiedLog: log) }
 ```
 
 It arrives as `unified-log.log`, one entry per line, newest last:
@@ -103,7 +122,7 @@ the report as a crash in your StareGlare inbox (`includeCrashReport: false` to s
 To ask people right after a crash, call this once at launch:
 
 ```swift
-Task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+Task { await stareGlare.offerReportAfterCrash(logFiles: [logFileURL]) }
 ```
 
 If the app crashed since the last launch, it shows "YourApp quit unexpectedly. Would you like to
@@ -123,10 +142,10 @@ or file is sent: only the message, the stack, the app version and the macOS vers
 
 ```swift
 // At launch: if the app crashed since the last check, send the exception and the crashed thread.
-Task { await snag.sendCrashAutomatically() }
+Task { await stareGlare.sendCrashAutomatically() }
 
 // Anywhere: an error you caught.
-Task { try? await snag.send(error: "\(error)", context: ["screen": "export"]) }
+Task { try? await stareGlare.send(error: "\(error)", context: ["screen": "export"]) }
 ```
 
 Each crash is sent once, and the crash file itself is not uploaded. Use `offerReportAfterCrash`
@@ -159,31 +178,31 @@ Since 0.6.0 the same package works in iPhone and iPad apps (iOS 15 or later). `r
 the error API are the same as on the Mac; what differs is set up below.
 
 ```swift
-import SnagReporter
+import StareGlareReporter
 
-let snag = SnagReporter(appSlug: "your-app", publicKey: "snag_pk_…",
+let stareGlare = StareGlareReporter(appSlug: "your-app", publicKey: "stareglare_pk_…",
                         baseURL: URL(string: "https://stareglare.com")!)
 
 @main
 struct MyApp: App {
     init() {
         // As early as possible: records crashes so the next launch can report them.
-        SnagReporter.installCrashDetection(unifiedLog: .app)
+        StareGlareReporter.installCrashDetection(unifiedLog: .app)
         // Optional: shaking the device opens a report.
-        snag.reportsOnShake(logFiles: { [logFileURL] }, unifiedLog: .app)
+        stareGlare.reportsOnShake(logFiles: { [logFileURL] }, unifiedLog: .app)
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 // After a crash: "MyApp quit unexpectedly. Would you like to send a report?"
-                .task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+                .task { await stareGlare.offerReportAfterCrash(logFiles: [logFileURL]) }
         }
     }
 }
 
 // From your own button, e.g. in Settings or a Help screen:
-Button("Report an Issue") { Task { await snag.report(logFiles: [logFileURL], unifiedLog: .app) } }
+Button("Report an Issue") { Task { await stareGlare.report(logFiles: [logFileURL], unifiedLog: .app) } }
 ```
 
 In a UIKit app, call `installCrashDetection()` and `reportsOnShake` in
@@ -194,7 +213,7 @@ screen is showing.
 and a Show button, as the review window does on the Mac. Cancel sends nothing.
 
 **Report page.** It opens in a Safari sheet over your app; the person closes it to come back.
-To open Safari instead: `snag.reportPagePresentation = .browser`.
+To open Safari instead: `stareGlare.reportPagePresentation = .browser`.
 
 **Snapshot.** A JPEG of the key window, taken before the review sheet appears
 (`includeWindowSnapshot: false` to skip it). Only your app's own window is captured: not the
@@ -209,7 +228,7 @@ device's name is never read: it is often the owner's name.
 simulator, and while Xcode is attached, iOS does not hide `<private>` values, so those entries
 show their text there; on a device in use they are hidden as usual.
 
-**Shake to report.** Off unless you call `reportsOnShake`. `SnagReporter.stopReportingOnShake()`
+**Shake to report.** Off unless you call `reportsOnShake`. `StareGlareReporter.stopReportingOnShake()`
 turns it off again. A view controller that handles shakes itself and does not call `super`
 keeps them.
 

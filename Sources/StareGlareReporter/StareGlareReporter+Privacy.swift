@@ -1,6 +1,6 @@
 import Foundation
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// The person's real home folder ("/Users/ana"), also inside the App Sandbox, where
     /// `NSHomeDirectory()` is the app's container.
     static var homeFolder: String {

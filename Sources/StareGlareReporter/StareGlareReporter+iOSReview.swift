@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// Shows the review sheet and waits for the person. Returns the files they kept, or nil if
     /// they cancelled. With nothing on screen to present from, everything is kept, as on the Mac
     /// without a running app.
@@ -14,7 +14,7 @@ extension SnagReporter {
             ?? ProcessInfo.processInfo.processName
         return await withCheckedContinuation { continuation in
             var finished = false
-            let view = SnagReviewView(
+            let view = StareGlareReviewView(
                 appName: appName,
                 host: destination.host ?? destination.absoluteString,
                 details: reviewDetails(diagnostics),
@@ -39,7 +39,7 @@ extension SnagReporter {
 
 /// Lists what a report will carry (the details and each file, with a switch and a way to read
 /// it) before anything is uploaded. The iOS counterpart of the Mac's review window.
-struct SnagReviewView: View {
+struct StareGlareReviewView: View {
     let appName: String
     let host: String
     let details: String
@@ -67,7 +67,7 @@ struct SnagReviewView: View {
             List {
                 Section {
                     HStack(alignment: .top, spacing: 12) {
-                        Image(uiImage: SnagReporter.icon)
+                        Image(uiImage: StareGlareReporter.icon)
                             .resizable()
                             .frame(width: 44, height: 44)
                             .accessibilityHidden(true)
@@ -107,7 +107,7 @@ struct SnagReviewView: View {
                 }
             }
             .sheet(item: $preview) { item in
-                SnagFilePreview(file: files[item.id])
+                StareGlareFilePreview(file: files[item.id])
             }
         }
         .navigationViewStyle(.stack)
@@ -118,7 +118,7 @@ struct SnagReviewView: View {
         let size = ByteCountFormatter.string(fromByteCount: Int64(file.data.count), countStyle: .file)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(SnagReporter.reviewKind(of: file))
+                Text(StareGlareReporter.reviewKind(of: file))
                 Text("\(file.filename) (\(size))")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -136,7 +136,7 @@ struct SnagReviewView: View {
 }
 
 /// Shows exactly the bytes that would be uploaded: the tail of a log, not the file on disk.
-struct SnagFilePreview: View {
+struct StareGlareFilePreview: View {
     let file: Attachment
     @Environment(\.dismiss) private var dismiss
 
@@ -151,10 +151,10 @@ struct SnagFilePreview: View {
                             .padding()
                     }
                 } else {
-                    SnagTextView(text: String(decoding: file.data, as: UTF8.self))
+                    StareGlareTextView(text: String(decoding: file.data, as: UTF8.self))
                 }
             }
-            .navigationTitle(SnagReporter.reviewKind(of: file))
+            .navigationTitle(StareGlareReporter.reviewKind(of: file))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -168,7 +168,7 @@ struct SnagFilePreview: View {
 
 /// A read-only text view: crash records and logs run to hundreds of KB, which a UITextView lays
 /// out lazily and a SwiftUI `Text` does not.
-struct SnagTextView: UIViewRepresentable {
+struct StareGlareTextView: UIViewRepresentable {
     let text: String
 
     func makeUIView(context: Context) -> UITextView {

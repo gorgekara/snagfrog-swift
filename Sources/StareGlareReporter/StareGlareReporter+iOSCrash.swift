@@ -24,7 +24,7 @@ private var signalSummaries: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?
 private let maxSignalFrames: Int32 = 128
 private var signalFrames: UnsafeMutablePointer<UnsafeMutableRawPointer?>?
 private var previousExceptionHandler: (@convention(c) (NSException) -> Void)?
-private var exceptionUnifiedLog: SnagReporter.UnifiedLog?
+private var exceptionUnifiedLog: StareGlareReporter.UnifiedLog?
 private var crashDetectionInstalled = false
 /// When the previous launch started, so only a crash from that session counts.
 private var previousLaunchStart: Date?
@@ -33,7 +33,7 @@ private func writeRaw(_ fd: Int32, _ text: StaticString) {
     _ = write(fd, text.utf8Start, text.utf8CodeUnitCount)
 }
 
-private func snagSignalHandler(_ signal: Int32, _ info: UnsafeMutablePointer<__siginfo>?, _ context: UnsafeMutableRawPointer?) {
+private func stareGlareSignalHandler(_ signal: Int32, _ info: UnsafeMutablePointer<__siginfo>?, _ context: UnsafeMutableRawPointer?) {
     if exceptionRecorded == 0, let path = crashRecordPath {
         let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
         if fd >= 0 {
@@ -63,23 +63,41 @@ private func snagSignalHandler(_ signal: Int32, _ info: UnsafeMutablePointer<__s
     raise(signal)
 }
 
-private func snagExceptionHandler(_ exception: NSException) {
-    SnagReporter.recordException(exception)
+private func stareGlareExceptionHandler(_ exception: NSException) {
+    StareGlareReporter.recordException(exception)
     exceptionRecorded = 1
     previousExceptionHandler?(exception)
 }
 
-extension SnagReporter {
+extension StareGlareReporter {
     static let crashRecordFilename = "last-crash.crash"
-    static let launchStartKey = "SnagReporter.launchStart"
+    static let launchStartKey = "StareGlareReporter.launchStart"
     /// The unified log kept in a crash record, at most.
     static let maxCrashLogBytes = 256 * 1024
 
-    /// Where the crash record is kept: Application Support/SnagReporter in the app's container.
+    /// Where the crash record is kept: Application Support/StareGlareReporter in the app's container.
     public static var crashDirectory: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return support.appendingPathComponent("SnagReporter", isDirectory: true)
+        return support.appendingPathComponent("StareGlareReporter", isDirectory: true)
+    }
+
+    /// Where versions before the StareGlare rename kept the crash record.
+    static var legacyCrashDirectory: URL {
+        crashDirectory.deletingLastPathComponent().appendingPathComponent("SnagReporter", isDirectory: true)
+    }
+
+    /// A crash recorded by a version from before the rename is moved into `directory` (keeping its
+    /// date), so the first launch after updating still reports it. The old folder is then removed.
+    static func moveLegacyCrashRecord(to directory: URL, from legacy: URL = legacyCrashDirectory) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: legacy.path) else { return }
+        let old = legacy.appendingPathComponent(crashRecordFilename)
+        let new = directory.appendingPathComponent(crashRecordFilename)
+        if fileManager.fileExists(atPath: old.path), !fileManager.fileExists(atPath: new.path) {
+            try? fileManager.moveItem(at: old, to: new)
+        }
+        try? fileManager.removeItem(at: legacy)
     }
 
     /// Call once, as early as possible at launch (`App.init`, or
@@ -101,11 +119,12 @@ extension SnagReporter {
         guard !crashDetectionInstalled else { return }
         crashDetectionInstalled = true
         exceptionUnifiedLog = unifiedLog
-        previousLaunchStart = defaults.object(forKey: launchStartKey) as? Date
+        previousLaunchStart = storedDate(forKey: launchStartKey, in: defaults)
         defaults.set(Date(), forKey: launchStartKey)
 
         let directory = crashDirectory
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        moveLegacyCrashRecord(to: directory)
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var excluded = directory
@@ -144,14 +163,14 @@ extension SnagReporter {
         previousSignalActions = previous
         for (signal, _) in names {
             var action = sigaction()
-            action.__sigaction_u.__sa_sigaction = snagSignalHandler
+            action.__sigaction_u.__sa_sigaction = stareGlareSignalHandler
             action.sa_flags = SA_SIGINFO | SA_ONSTACK
             sigemptyset(&action.sa_mask)
             sigaction(signal, &action, previous + Int(signal))
         }
 
         previousExceptionHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(snagExceptionHandler)
+        NSSetUncaughtExceptionHandler(stareGlareExceptionHandler)
     }
 
     /// The lines under "Crash:" in a record: app, OS, model, and the binary's name, load address
@@ -250,7 +269,7 @@ extension SnagReporter {
     /// one with the crash record attached.
     ///
     /// ```swift
-    /// .task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+    /// .task { await stareGlare.offerReportAfterCrash(logFiles: [logFileURL]) }
     /// ```
     ///
     /// - Returns: true if the person chose to send a report and did not cancel its review.
@@ -261,7 +280,7 @@ extension SnagReporter {
         defaults: UserDefaults = .standard
     ) async -> Bool {
         guard let crash = Self.latestCrash() else { return false }
-        let lastSeen = defaults.object(forKey: Self.lastCrashSeenKey) as? Date
+        let lastSeen = Self.storedDate(forKey: Self.lastCrashSeenKey, in: defaults)
         guard Self.isNewCrash(crash, lastSeen: lastSeen) else { return false }
         // Nothing on screen yet: ask on a later call rather than never.
         guard let presenter = Self.topViewController() else { return false }

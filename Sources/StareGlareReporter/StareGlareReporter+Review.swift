@@ -3,7 +3,7 @@ import Foundation
 import AppKit
 #endif
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// A plain name for a file, so the person knows what each one is.
     static func reviewKind(of file: Attachment) -> String {
         let name = file.filename.lowercased()
@@ -32,7 +32,7 @@ extension SnagReporter {
     @MainActor
     static func reviewInWindow(diagnostics: [String: String], files: [Attachment], destination: URL) -> [Attachment]? {
         guard NSApp != nil else { return files }
-        return SnagReviewWindow(diagnostics: diagnostics, files: files, destination: destination).run()
+        return StareGlareReviewWindow(diagnostics: diagnostics, files: files, destination: destination).run()
     }
     #endif
 }
@@ -41,7 +41,7 @@ extension SnagReporter {
 /// Lists what a report will carry (the details and each file, with a tick box and a way to read
 /// it) before anything is uploaded.
 @MainActor
-final class SnagReviewWindow: NSObject, NSWindowDelegate {
+final class StareGlareReviewWindow: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let files: [Attachment]
     private(set) var boxes: [NSButton] = []
@@ -76,7 +76,7 @@ final class SnagReviewWindow: NSObject, NSWindowDelegate {
         heading.orientation = .vertical
         heading.alignment = .leading
         heading.spacing = 4
-        let icon = NSImageView(image: SnagReporter.icon(size: 44))
+        let icon = NSImageView(image: StareGlareReporter.icon(size: 44))
         icon.setContentHuggingPriority(.required, for: .horizontal)
         let header = NSStackView(views: [icon, heading])
         header.alignment = .top
@@ -86,7 +86,7 @@ final class SnagReviewWindow: NSObject, NSWindowDelegate {
         if !files.isEmpty {
             rows.append(Self.caption("Files"))
             for (index, file) in files.enumerated() {
-                let box = NSButton(checkboxWithTitle: SnagReporter.reviewTitle(for: file), target: nil, action: nil)
+                let box = NSButton(checkboxWithTitle: StareGlareReporter.reviewTitle(for: file), target: nil, action: nil)
                 box.state = .on
                 box.lineBreakMode = .byTruncatingMiddle
                 box.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -103,7 +103,7 @@ final class SnagReviewWindow: NSObject, NSWindowDelegate {
             rows.append(Self.wrapping("Untick anything you'd rather not send.", small: true))
         }
         rows.append(Self.caption("Details"))
-        let details = Self.textScroll(SnagReporter.reviewDetails(diagnostics), monospaced: false)
+        let details = Self.textScroll(StareGlareReporter.reviewDetails(diagnostics), monospaced: false)
         details.heightAnchor.constraint(equalToConstant: 112).isActive = true
         rows.append(details)
 
@@ -192,7 +192,7 @@ final class SnagReviewWindow: NSObject, NSWindowDelegate {
         } else {
             body = Self.textScroll(String(decoding: file.data, as: UTF8.self), monospaced: true)
         }
-        let name = NSTextField(labelWithString: SnagReporter.reviewTitle(for: file))
+        let name = NSTextField(labelWithString: StareGlareReporter.reviewTitle(for: file))
         name.font = .systemFont(ofSize: 12, weight: .medium)
         name.lineBreakMode = .byTruncatingMiddle
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

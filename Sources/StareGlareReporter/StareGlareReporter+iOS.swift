@@ -11,19 +11,19 @@ public enum ReportPagePresentation: Sendable {
     case browser
 }
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// The StareGlare app icon, for buttons and settings rows.
     ///
     /// As a Swift package it comes from the package's resources. If you vendor these files into
-    /// an app instead, add `SnagIcon.png` to the app's asset catalog as an image set named "SnagIcon".
+    /// an app instead, add `StareGlareIcon.png` to the app's asset catalog as an image set named "StareGlareIcon".
     public static var icon: UIImage {
         #if SWIFT_PACKAGE
-        if let url = Bundle.module.url(forResource: "SnagIcon", withExtension: "png"),
+        if let url = Bundle.module.url(forResource: "StareGlareIcon", withExtension: "png"),
            let image = UIImage(contentsOfFile: url.path) {
             return image
         }
         #else
-        if let image = UIImage(named: "SnagIcon") {
+        if let image = UIImage(named: "StareGlareIcon") {
             return image
         }
         #endif
@@ -142,15 +142,15 @@ extension SnagReporter {
 /// A small card with the StareGlare icon and a spinner over the app, shown while logs are read and
 /// uploaded. The iOS counterpart of the Mac's floating panel.
 @MainActor
-final class SnagProgressPanel {
+final class StareGlareProgressPanel {
     private let view: UIView
 
     private init(view: UIView) {
         self.view = view
     }
 
-    static func show(message: String = "Preparing your report…") -> SnagProgressPanel? {
-        guard let window = SnagReporter.keyWindow() else { return nil }
+    static func show(message: String = "Preparing your report…") -> StareGlareProgressPanel? {
+        guard let window = StareGlareReporter.keyWindow() else { return nil }
         let card = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
         card.layer.cornerRadius = 14
         card.clipsToBounds = true
@@ -159,7 +159,7 @@ final class SnagProgressPanel {
         card.accessibilityLabel = message
         card.accessibilityTraits = .updatesFrequently
 
-        let icon = UIImageView(image: SnagReporter.icon)
+        let icon = UIImageView(image: StareGlareReporter.icon)
         icon.contentMode = .scaleAspectFit
         let label = UILabel()
         label.text = message
@@ -187,7 +187,7 @@ final class SnagProgressPanel {
             card.widthAnchor.constraint(lessThanOrEqualTo: window.widthAnchor, constant: -48)
         ])
         UIAccessibility.post(notification: .announcement, argument: message)
-        return SnagProgressPanel(view: card)
+        return StareGlareProgressPanel(view: card)
     }
 
     func close() {
@@ -197,12 +197,12 @@ final class SnagProgressPanel {
 
 // MARK: - Shake to report
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// Opt in to reporting by shaking the device: a shake starts `report()` as if the person had
     /// chosen "Report an Issue". Off unless you call this; call it once, e.g. at launch.
     ///
     /// ```swift
-    /// snag.reportsOnShake(logFiles: { [logFileURL] }, unifiedLog: .app)
+    /// stareGlare.reportsOnShake(logFiles: { [logFileURL] }, unifiedLog: .app)
     /// ```
     ///
     /// It listens on every window, through the responder chain: a view controller that handles
@@ -212,14 +212,14 @@ extension SnagReporter {
         logFiles: @escaping @MainActor () -> [URL] = { [] },
         unifiedLog: UnifiedLog? = nil
     ) {
-        SnagShake.installOnce()
-        SnagShake.handler = {
+        StareGlareShake.installOnce()
+        StareGlareShake.handler = {
             // One report at a time, and not while the report page is up.
-            guard !SnagShake.isReporting, !(Self.topViewController() is SFSafariViewController) else { return }
-            SnagShake.isReporting = true
+            guard !StareGlareShake.isReporting, !(Self.topViewController() is SFSafariViewController) else { return }
+            StareGlareShake.isReporting = true
             Task { @MainActor in
                 await self.report(logFiles: logFiles(), unifiedLog: unifiedLog)
-                SnagShake.isReporting = false
+                StareGlareShake.isReporting = false
             }
         }
     }
@@ -227,12 +227,12 @@ extension SnagReporter {
     /// Stops reporting on shake.
     @MainActor
     public static func stopReportingOnShake() {
-        SnagShake.handler = nil
+        StareGlareShake.handler = nil
     }
 }
 
 @MainActor
-enum SnagShake {
+enum StareGlareShake {
     static var handler: (@MainActor () -> Void)?
     static var isReporting = false
     private static var installed = false
@@ -244,23 +244,23 @@ enum SnagShake {
         installed = true
         let cls: AnyClass = UIWindow.self
         let originalSelector = #selector(UIResponder.motionEnded(_:with:))
-        let snagSelector = #selector(UIWindow.snag_motionEnded(_:with:))
+        let stareGlareSelector = #selector(UIWindow.stareGlare_motionEnded(_:with:))
         guard let original = class_getInstanceMethod(cls, originalSelector),
-              let snag = class_getInstanceMethod(cls, snagSelector) else { return }
-        if class_addMethod(cls, originalSelector, method_getImplementation(snag), method_getTypeEncoding(snag)) {
-            // UIWindow inherited the method: it now has its own, and snag_ calls the inherited one.
-            class_replaceMethod(cls, snagSelector, method_getImplementation(original), method_getTypeEncoding(original))
+              let stareGlare = class_getInstanceMethod(cls, stareGlareSelector) else { return }
+        if class_addMethod(cls, originalSelector, method_getImplementation(stareGlare), method_getTypeEncoding(stareGlare)) {
+            // UIWindow inherited the method: it now has its own, and stareGlare_ calls the inherited one.
+            class_replaceMethod(cls, stareGlareSelector, method_getImplementation(original), method_getTypeEncoding(original))
         } else {
-            method_exchangeImplementations(original, snag)
+            method_exchangeImplementations(original, stareGlare)
         }
     }
 }
 
 extension UIWindow {
-    @objc func snag_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
+    @objc func stareGlare_motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         // After the swap this calls the original implementation.
-        snag_motionEnded(motion, with: event)
-        if motion == .motionShake { SnagShake.handler?() }
+        stareGlare_motionEnded(motion, with: event)
+        if motion == .motionShake { StareGlareShake.handler?() }
     }
 }
 #endif

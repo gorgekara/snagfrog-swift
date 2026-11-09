@@ -2,19 +2,25 @@
 import PackageDescription
 
 let package = Package(
-    name: "SnagReporter",
+    name: "StareGlareReporter",
     platforms: [.macOS(.v12), .iOS(.v15)],
     products: [
+        .library(name: "StareGlareReporter", targets: ["StareGlareReporter"]),
+        // Deprecated: the name before the StareGlare rename. Re-exports StareGlareReporter.
         .library(name: "SnagReporter", targets: ["SnagReporter"])
     ],
     targets: [
         .target(
-            name: "SnagReporter",
+            name: "StareGlareReporter",
             resources: [.process("Resources")]
         ),
+        .target(
+            name: "SnagReporter",
+            dependencies: ["StareGlareReporter"]
+        ),
         .testTarget(
-            name: "SnagReporterTests",
-            dependencies: ["SnagReporter"]
+            name: "StareGlareReporterTests",
+            dependencies: ["StareGlareReporter", "SnagReporter"]
         )
     ]
 )

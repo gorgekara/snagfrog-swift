@@ -14,12 +14,26 @@ public struct CrashReport: Sendable, Equatable {
     public let summary: String?
 }
 
-extension SnagReporter {
+extension StareGlareReporter {
     /// Crash reports older than this are ignored.
     public static let crashLookback: TimeInterval = 7 * 24 * 60 * 60
     /// Crash files are JSON; only this much of the start is sent.
     static let maxCrashBytes = 1024 * 1024
-    static let lastCrashSeenKey = "SnagReporter.lastCrashSeen"
+    static let lastCrashSeenKey = "StareGlareReporter.lastCrashSeen"
+
+    /// Before the StareGlare rename, these UserDefaults keys started with "SnagReporter.". A key
+    /// not yet written under its new name is read under the old one, so an app that updates keeps
+    /// what it remembered (a crash already offered or sent is not asked about or sent again).
+    static func legacyKey(for key: String) -> String {
+        guard key.hasPrefix("StareGlareReporter.") else { return key }
+        return "SnagReporter." + key.dropFirst("StareGlareReporter.".count)
+    }
+
+    /// The date stored under `key`, or under its pre-rename name if the new one was never written.
+    static func storedDate(forKey key: String, in defaults: UserDefaults) -> Date? {
+        if let date = defaults.object(forKey: key) as? Date { return date }
+        return defaults.object(forKey: legacyKey(for: key)) as? Date
+    }
 
     #if os(macOS)
     /// Where macOS writes crash reports for the current user. A sandboxed app cannot read this
@@ -127,7 +141,7 @@ extension SnagReporter {
     /// send a report and, if so, opens the report page with the crash log attached.
     ///
     /// ```swift
-    /// Task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+    /// Task { await stareGlare.offerReportAfterCrash(logFiles: [logFileURL]) }
     /// ```
     ///
     /// - Returns: true if the user chose to send a report and did not cancel its review.
@@ -138,7 +152,7 @@ extension SnagReporter {
         defaults: UserDefaults = .standard
     ) async -> Bool {
         guard let crash = Self.latestCrash() else { return false }
-        let lastSeen = defaults.object(forKey: Self.lastCrashSeenKey) as? Date
+        let lastSeen = Self.storedDate(forKey: Self.lastCrashSeenKey, in: defaults)
         guard Self.isNewCrash(crash, lastSeen: lastSeen) else { return false }
         // Remember it either way, so the question is asked once per crash.
         defaults.set(crash.date, forKey: Self.lastCrashSeenKey)

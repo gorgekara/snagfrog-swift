@@ -1,11 +1,11 @@
 import XCTest
-@testable import SnagReporter
+@testable import StareGlareReporter
 
-final class SnagReporterTests: XCTestCase {
-    let reporter = SnagReporter(
+final class StareGlareReporterTests: XCTestCase {
+    let reporter = StareGlareReporter(
         appSlug: "hourslip",
-        publicKey: "snag_pk_test",
-        baseURL: URL(string: "https://snag.example.com")!
+        publicKey: "stareglare_pk_test",
+        baseURL: URL(string: "https://stareglare.example.com")!
     )
 
     func testReportPageURLUsesShortKeysAndPrefixesCustomOnes() {
@@ -14,29 +14,29 @@ final class SnagReporterTests: XCTestCase {
         ])
         XCTAssertEqual(
             url.absoluteString,
-            "https://snag.example.com/r/hourslip?v=1.4.2&d_gpu=M3%20Pro&os=macOS%2015.1.0"
+            "https://stareglare.example.com/r/hourslip?v=1.4.2&d_gpu=M3%20Pro&os=macOS%2015.1.0"
         )
     }
 
     func testReportPageURLWithoutDiagnosticsHasNoQuery() {
-        XCTAssertEqual(reporter.reportPageURL().absoluteString, "https://snag.example.com/r/hourslip")
+        XCTAssertEqual(reporter.reportPageURL().absoluteString, "https://stareglare.example.com/r/hourslip")
     }
 
     func testTailReadsOnlyTheEndOfAFile() throws {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("snag-test-\(UUID()).log")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("stareglare-test-\(UUID()).log")
         try Data("0123456789".utf8).write(to: file)
         defer { try? FileManager.default.removeItem(at: file) }
 
-        let tail = try XCTUnwrap(SnagReporter.tail(of: file, maxBytes: 4))
+        let tail = try XCTUnwrap(StareGlareReporter.tail(of: file, maxBytes: 4))
         XCTAssertEqual(String(decoding: tail.data, as: UTF8.self), "6789")
         XCTAssertEqual(tail.filename, file.lastPathComponent)
 
-        let whole = try XCTUnwrap(SnagReporter.tail(of: file, maxBytes: 100))
+        let whole = try XCTUnwrap(StareGlareReporter.tail(of: file, maxBytes: 100))
         XCTAssertEqual(whole.data.count, 10)
     }
 
     func testTailOfMissingFileIsNil() {
-        XCTAssertNil(SnagReporter.tail(of: URL(fileURLWithPath: "/nonexistent/x.log"), maxBytes: 10))
+        XCTAssertNil(StareGlareReporter.tail(of: URL(fileURLWithPath: "/nonexistent/x.log"), maxBytes: 10))
     }
 
     func testRequestEncodesFilesAsBase64() throws {
@@ -52,7 +52,7 @@ final class SnagReporterTests: XCTestCase {
     }
 
     func testDefaultDiagnosticsIncludeOSAndArch() {
-        let d = SnagReporter.defaultDiagnostics()
+        let d = StareGlareReporter.defaultDiagnostics()
         #if os(iOS)
         XCTAssertTrue(d["os_version"]?.hasPrefix("iOS ") ?? false)
         XCTAssertNotNil(d["device_model"])
@@ -70,14 +70,14 @@ final class SnagReporterTests: XCTestCase {
     func testFitForUploadKeepsSnapshotAndCapsFileCount() {
         let logs = (1...6).map { blob("log\($0).log", 100) }
         let snapshot = blob("window.jpg", 50, type: "image/jpeg")
-        let fitted = SnagReporter.fitForUpload(logs: logs, snapshot: snapshot)
+        let fitted = StareGlareReporter.fitForUpload(logs: logs, snapshot: snapshot)
         XCTAssertEqual(fitted.map(\.filename), ["log1.log", "log2.log", "log3.log", "window.jpg"])
     }
 
     func testFitForUploadShrinksLogsToTheTotalBudget() {
         let logs = [blob("big.log", 3_000), blob("small.log", 100), blob("huge.log", 5_000)]
         let snapshot = blob("window.jpg", 1_000, type: "image/jpeg")
-        let fitted = SnagReporter.fitForUpload(logs: logs, snapshot: snapshot, maxTotalBytes: 4_000)
+        let fitted = StareGlareReporter.fitForUpload(logs: logs, snapshot: snapshot, maxTotalBytes: 4_000)
         XCTAssertEqual(fitted.map(\.filename), ["big.log", "small.log", "huge.log", "window.jpg"])
         XCTAssertLessThanOrEqual(fitted.reduce(0) { $0 + $1.data.count }, 4_000)
         XCTAssertEqual(fitted[1].data.count, 100, "short logs are kept whole")
@@ -86,23 +86,23 @@ final class SnagReporterTests: XCTestCase {
 
     func testFitForUploadWithoutSnapshotUsesAllFourSlots() {
         let logs = (1...5).map { blob("log\($0).log", 10) }
-        XCTAssertEqual(SnagReporter.fitForUpload(logs: logs, snapshot: nil).count, 4)
+        XCTAssertEqual(StareGlareReporter.fitForUpload(logs: logs, snapshot: nil).count, 4)
     }
 }
 
 #if canImport(AppKit)
 import AppKit
 
-final class SnagReporterUITests: XCTestCase {
+final class StareGlareReporterUITests: XCTestCase {
     func testBundledIconLoads() {
-        let icon = SnagReporter.icon
+        let icon = StareGlareReporter.icon
         XCTAssertGreaterThan(icon.representations.first?.pixelsWide ?? 0, 128, "icon should be the bundled high-res PNG")
-        XCTAssertEqual(SnagReporter.icon(size: 16).size, NSSize(width: 16, height: 16))
+        XCTAssertEqual(StareGlareReporter.icon(size: 16).size, NSSize(width: 16, height: 16))
     }
 
     @MainActor
     func testMenuItemHasIconTitleAndLiveTarget() throws {
-        let reporter = SnagReporter(appSlug: "hourslip", publicKey: "k", baseURL: URL(string: "https://snag.example.com")!)
+        let reporter = StareGlareReporter(appSlug: "hourslip", publicKey: "k", baseURL: URL(string: "https://stareglare.example.com")!)
         let item = reporter.menuItem(logFiles: { [] })
         XCTAssertEqual(item.title, "Report an Issue…")
         XCTAssertEqual(item.image?.size, NSSize(width: 16, height: 16))

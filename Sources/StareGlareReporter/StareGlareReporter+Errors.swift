@@ -10,8 +10,8 @@ struct ErrorRequest: Encodable {
     let context: [String: String]
 }
 
-extension SnagReporter {
-    static let lastCrashSentKey = "SnagReporter.lastCrashSent"
+extension StareGlareReporter {
+    static let lastCrashSentKey = "StareGlareReporter.lastCrashSent"
     /// Frames of the crashed thread that are sent.
     static let maxCrashFrames = 40
 
@@ -22,7 +22,7 @@ extension SnagReporter {
     /// Only call this if your privacy policy says the app reports errors on its own.
     ///
     /// ```swift
-    /// do { try save() } catch { Task { try? await snag.send(error: "\(error)") } }
+    /// do { try save() } catch { Task { try? await stareGlare.send(error: "\(error)") } }
     /// ```
     public func send(
         error message: String,
@@ -47,7 +47,7 @@ extension SnagReporter {
         request.httpBody = try JSONEncoder().encode(body)
         let (_, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw SnagError.server((response as? HTTPURLResponse)?.statusCode ?? 0)
+            throw StareGlareError.server((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
     }
 
@@ -63,7 +63,7 @@ extension SnagReporter {
     @discardableResult
     public func sendCrashAutomatically(defaults: UserDefaults = .standard) async -> Bool {
         guard let crash = Self.latestCrash() else { return false }
-        let lastSent = defaults.object(forKey: Self.lastCrashSentKey) as? Date
+        let lastSent = Self.storedDate(forKey: Self.lastCrashSentKey, in: defaults)
         guard Self.isNewCrash(crash, lastSeen: lastSent) else { return false }
         #if os(iOS)
         let stack = Self.head(of: crash.file, maxBytes: Self.maxCrashBytes).flatMap(Self.recordedCrashStack)

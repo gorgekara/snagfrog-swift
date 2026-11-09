@@ -1,5 +1,5 @@
 import XCTest
-@testable import SnagReporter
+@testable import StareGlareReporter
 
 /// Answers every request with a session, and remembers what was asked.
 final class StubServer: URLProtocol {
@@ -31,7 +31,7 @@ final class StubServer: URLProtocol {
         Self.bodies.append(body)
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(#"{"token":"tok","url":"https://snag.example.com/r/hourslip?s=tok"}"#.utf8))
+        client?.urlProtocol(self, didLoad: Data(#"{"token":"tok","url":"https://stareglare.example.com/r/hourslip?s=tok"}"#.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 }
@@ -41,9 +41,9 @@ final class ReviewTests: XCTestCase {
     private let crash = Attachment(filename: "HourSlip-2026-10-03-101500.ips", contentType: "text/plain", data: Data("crash".utf8))
     private let snapshot = Attachment(filename: "window.jpg", contentType: "image/jpeg", data: Data([0xFF, 0xD8]))
 
-    private func reporter() -> SnagReporter {
-        SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_test",
-                     baseURL: URL(string: "https://snag.example.com")!, session: StubServer.session())
+    private func reporter() -> StareGlareReporter {
+        StareGlareReporter(appSlug: "hourslip", publicKey: "stareglare_pk_test",
+                     baseURL: URL(string: "https://stareglare.example.com")!, session: StubServer.session())
     }
 
     private func uploadedFilenames() throws -> [[String]] {
@@ -72,7 +72,7 @@ final class ReviewTests: XCTestCase {
         }
         XCTAssertEqual(requestsSeenDuringReview, 0)
         XCTAssertEqual(shown, [log, crash], "the review shows exactly what would be uploaded")
-        XCTAssertEqual(url?.absoluteString, "https://snag.example.com/r/hourslip?s=tok")
+        XCTAssertEqual(url?.absoluteString, "https://stareglare.example.com/r/hourslip?s=tok")
         XCTAssertEqual(try uploadedFilenames(), [["app.log", "HourSlip-2026-10-03-101500.ips"]])
     }
 
@@ -91,45 +91,45 @@ final class ReviewTests: XCTestCase {
     }
 
     func testFilesAreNamedInPlainWords() {
-        XCTAssertEqual(SnagReporter.reviewKind(of: crash), "Crash report")
-        XCTAssertEqual(SnagReporter.reviewKind(of: snapshot), "Window snapshot")
-        XCTAssertEqual(SnagReporter.reviewKind(of: log), "Log")
-        XCTAssertTrue(SnagReporter.reviewTitle(for: log).hasPrefix("Log · app.log ("))
+        XCTAssertEqual(StareGlareReporter.reviewKind(of: crash), "Crash report")
+        XCTAssertEqual(StareGlareReporter.reviewKind(of: snapshot), "Window snapshot")
+        XCTAssertEqual(StareGlareReporter.reviewKind(of: log), "Log")
+        XCTAssertTrue(StareGlareReporter.reviewTitle(for: log).hasPrefix("Log · app.log ("))
     }
 
     func testDetailsAreReadableAndInAStableOrder() {
         XCTAssertEqual(
-            SnagReporter.reviewDetails(["os_version": "macOS 15.1", "app_version": "1.4.2", "crash": "EXC_BAD_ACCESS"]),
+            StareGlareReporter.reviewDetails(["os_version": "macOS 15.1", "app_version": "1.4.2", "crash": "EXC_BAD_ACCESS"]),
             "App version: 1.4.2\nCrash: EXC_BAD_ACCESS\nOs version: macOS 15.1"
         )
     }
 
     func testHomeFolderBecomesATilde() {
         let home = "/Users/ana"
-        XCTAssertEqual(SnagReporter.scrubHome("open /Users/ana/Library/Logs/app.log failed", home: home),
+        XCTAssertEqual(StareGlareReporter.scrubHome("open /Users/ana/Library/Logs/app.log failed", home: home),
                        "open ~/Library/Logs/app.log failed")
-        XCTAssertEqual(SnagReporter.scrubHome(#"{"path":"\/Users\/ana\/Apps\/Capta.app"}"#, home: home),
+        XCTAssertEqual(StareGlareReporter.scrubHome(#"{"path":"\/Users\/ana\/Apps\/Capta.app"}"#, home: home),
                        #"{"path":"~\/Apps\/Capta.app"}"#, "crash reports escape their slashes")
-        XCTAssertEqual(SnagReporter.scrubHome("cwd=/Users/ana", home: home), "cwd=~")
-        XCTAssertEqual(SnagReporter.scrubHome("/Users/anabel/x and /Users/Shared/y", home: home),
+        XCTAssertEqual(StareGlareReporter.scrubHome("cwd=/Users/ana", home: home), "cwd=~")
+        XCTAssertEqual(StareGlareReporter.scrubHome("/Users/anabel/x and /Users/Shared/y", home: home),
                        "/Users/anabel/x and /Users/Shared/y", "other folders are left alone")
-        XCTAssertEqual(SnagReporter.scrubHome("/Users/a.b (c)/x", home: "/Users/a.b (c)"), "~/x")
+        XCTAssertEqual(StareGlareReporter.scrubHome("/Users/a.b (c)/x", home: "/Users/a.b (c)"), "~/x")
     }
 
     func testOnlyTextFilesAreScrubbed() {
         let text = Attachment(filename: "app.log", contentType: "text/plain", data: Data("/Users/ana/x".utf8))
-        XCTAssertEqual(String(decoding: SnagReporter.scrubHome(text, home: "/Users/ana").data, as: UTF8.self), "~/x")
-        XCTAssertEqual(SnagReporter.scrubHome(snapshot, home: "/Users/ana"), snapshot)
+        XCTAssertEqual(String(decoding: StareGlareReporter.scrubHome(text, home: "/Users/ana").data, as: UTF8.self), "~/x")
+        XCTAssertEqual(StareGlareReporter.scrubHome(snapshot, home: "/Users/ana"), snapshot)
     }
 
     #if os(macOS)
     func testHomeFolderIsTheRealOneNotAContainer() {
-        XCTAssertFalse(SnagReporter.homeFolder.contains("/Library/Containers/"))
-        XCTAssertTrue(SnagReporter.homeFolder.hasPrefix("/"))
+        XCTAssertFalse(StareGlareReporter.homeFolder.contains("/Library/Containers/"))
+        XCTAssertTrue(StareGlareReporter.homeFolder.hasPrefix("/"))
     }
     #else
     func testHomeFolderIsTheAppContainer() {
-        XCTAssertEqual(SnagReporter.homeFolder, NSHomeDirectory())
+        XCTAssertEqual(StareGlareReporter.homeFolder, NSHomeDirectory())
     }
     #endif
 
@@ -137,9 +137,9 @@ final class ReviewTests: XCTestCase {
     @MainActor
     func testReviewWindowKeepsOnlyTickedFiles() {
         _ = NSApplication.shared
-        let window = SnagReviewWindow(diagnostics: ["os_version": "macOS 15.1"], files: [log, crash, snapshot],
-                                      destination: URL(string: "https://snag.example.com")!)
-        XCTAssertEqual(window.boxes.map(\.title).first, SnagReporter.reviewTitle(for: log))
+        let window = StareGlareReviewWindow(diagnostics: ["os_version": "macOS 15.1"], files: [log, crash, snapshot],
+                                      destination: URL(string: "https://stareglare.example.com")!)
+        XCTAssertEqual(window.boxes.map(\.title).first, StareGlareReporter.reviewTitle(for: log))
         XCTAssertEqual(window.ticked, [log, crash, snapshot], "everything starts ticked")
         window.boxes[1].state = .off
         XCTAssertEqual(window.ticked, [log, snapshot])
