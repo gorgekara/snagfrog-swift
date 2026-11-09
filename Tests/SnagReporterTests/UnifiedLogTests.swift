@@ -133,7 +133,12 @@ final class UnifiedLogTests: XCTestCase {
             if !found.isEmpty { break }
             Thread.sleep(forTimeInterval: 0.1)
         }
+        #if targetEnvironment(simulator)
+        // The simulator does not hide private values, so the second entry arrives readable.
+        XCTAssertTrue([[marker], [marker, marker]].contains(found.map(\.message)), "\(found.map(\.message))")
+        #else
         XCTAssertEqual(found.map(\.message), [marker])
+        #endif
         XCTAssertEqual(found.first?.level, "error")
         XCTAssertEqual(found.first?.subsystem, subsystem)
         XCTAssertEqual(found.first?.category, "probe")
@@ -156,6 +161,7 @@ final class UnifiedLogTests: XCTestCase {
         XCTAssertNil(SnagReporter.unifiedLogAttachment(options, bundleID: nil, maxBytes: 10_000))
     }
 
+    #if canImport(AppKit)
     @MainActor
     func testTheMenuItemCanBeAskedToAttachTheUnifiedLog() throws {
         let reporter = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_test", baseURL: URL(string: "https://snag.example.com")!)
@@ -164,4 +170,5 @@ final class UnifiedLogTests: XCTestCase {
         XCTAssertEqual(target.unifiedLog, .app)
         XCTAssertNil((reporter.menuItem().target as? SnagMenuTarget)?.unifiedLog)
     }
+    #endif
 }

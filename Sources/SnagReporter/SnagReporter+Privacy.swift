@@ -4,8 +4,14 @@ extension SnagReporter {
     /// The person's real home folder ("/Users/ana"), also inside the App Sandbox, where
     /// `NSHomeDirectory()` is the app's container.
     static var homeFolder: String {
+        #if os(iOS)
+        // The app's container ("/var/mobile/Containers/Data/Application/<UUID>"): paths in logs
+        // become "~/Documents/…".
+        return NSHomeDirectory()
+        #else
         if let dir = getpwuid(getuid())?.pointee.pw_dir { return String(cString: dir) }
         return NSHomeDirectory()
+        #endif
     }
 
     /// Replaces the home folder with `~`, so a path keeps its meaning without naming the account:

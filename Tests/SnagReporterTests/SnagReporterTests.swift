@@ -53,7 +53,13 @@ final class SnagReporterTests: XCTestCase {
 
     func testDefaultDiagnosticsIncludeOSAndArch() {
         let d = SnagReporter.defaultDiagnostics()
+        #if os(iOS)
+        XCTAssertTrue(d["os_version"]?.hasPrefix("iOS ") ?? false)
+        XCTAssertNotNil(d["device_model"])
+        XCTAssertNotNil(d["low_power_mode"])
+        #else
         XCTAssertTrue(d["os_version"]?.hasPrefix("macOS ") ?? false)
+        #endif
         XCTAssertNotNil(d["arch"])
     }
 

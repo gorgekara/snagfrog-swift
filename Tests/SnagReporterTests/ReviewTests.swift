@@ -122,10 +122,16 @@ final class ReviewTests: XCTestCase {
         XCTAssertEqual(SnagReporter.scrubHome(snapshot, home: "/Users/ana"), snapshot)
     }
 
+    #if os(macOS)
     func testHomeFolderIsTheRealOneNotAContainer() {
         XCTAssertFalse(SnagReporter.homeFolder.contains("/Library/Containers/"))
         XCTAssertTrue(SnagReporter.homeFolder.hasPrefix("/"))
     }
+    #else
+    func testHomeFolderIsTheAppContainer() {
+        XCTAssertEqual(SnagReporter.homeFolder, NSHomeDirectory())
+    }
+    #endif
 
     #if canImport(AppKit)
     @MainActor

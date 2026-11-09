@@ -3,12 +3,14 @@ import Foundation
 import AppKit
 #endif
 
-/// A crash report macOS wrote for this app.
+/// A crash report for this app: one macOS wrote, or on iOS the record `installCrashDetection()`
+/// wrote when the app crashed.
 public struct CrashReport: Sendable, Equatable {
     public let file: URL
     /// When the crash file was written.
     public let date: Date
-    /// For example "EXC_BAD_ACCESS (SIGSEGV)". Nil if the file could not be parsed.
+    /// For example "EXC_BAD_ACCESS (SIGSEGV)", or on iOS "NSRangeException: …" or "SIGSEGV".
+    /// Nil if the file could not be parsed.
     public let summary: String?
 }
 
@@ -19,6 +21,7 @@ extension SnagReporter {
     static let maxCrashBytes = 1024 * 1024
     static let lastCrashSeenKey = "SnagReporter.lastCrashSeen"
 
+    #if os(macOS)
     /// Where macOS writes crash reports for the current user. A sandboxed app cannot read this
     /// folder, so there `latestCrash` returns nil and reports work as they do without it.
     public static var crashDirectory: URL {
@@ -56,6 +59,7 @@ extension SnagReporter {
         }
         return nil
     }
+    #endif
 
     /// Reads the process name, report type and exception out of an `.ips` file: one line of JSON
     /// metadata, then a JSON body. Older `.crash` text files yield only the exception line.

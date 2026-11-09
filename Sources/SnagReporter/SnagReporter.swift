@@ -2,11 +2,13 @@ import Foundation
 import os
 #if canImport(AppKit)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
-/// Opens your app's SnagFrog report page in the browser with logs, diagnostics and (optionally)
-/// a snapshot of the key window. The person reviews what was collected in a window first;
-/// nothing is uploaded until they continue.
+/// Opens your app's SnagFrog report page with logs, diagnostics and (optionally) a snapshot of
+/// the key window: in the browser on macOS, in an in-app Safari sheet (or Safari) on iOS. The
+/// person reviews what was collected first; nothing is uploaded until they continue.
 ///
 /// ```swift
 /// let snag = SnagReporter(appSlug: "hourslip", publicKey: "snag_pk_…",
@@ -28,6 +30,10 @@ public struct SnagReporter: Sendable {
     /// The server's per-file limit.
     public static let maxFileBytes = 4 * 1024 * 1024
     public var session: URLSession
+    #if os(iOS)
+    /// Where the report page opens on iOS: in a Safari sheet over the app (the default), or in Safari.
+    public var reportPagePresentation: ReportPagePresentation = .inApp
+    #endif
 
     public init(appSlug: String, publicKey: String, baseURL: URL, session: URLSession = .shared) {
         self.appSlug = appSlug
@@ -39,15 +45,16 @@ public struct SnagReporter: Sendable {
     /// Collects context, shows it for review, uploads what the person kept, and opens the report page.
     /// If the upload fails, the page still opens with diagnostics in the URL.
     /// - Parameters:
-    ///   - reviewsBeforeUpload: show the review window first: the details and every file, each
-    ///     with a tick box and a way to read it. Nothing leaves the Mac until the person
-    ///     continues, and unticked files are never sent. Pass false only if your app has
-    ///     already shown the person what will be sent.
-    ///   - unifiedLog: also attach what the app wrote to macOS's unified log (`Logger`, `os_log`),
+    ///   - reviewsBeforeUpload: show the review window (a sheet on iOS) first: the details and
+    ///     every file, each with a tick box or switch and a way to read it. Nothing leaves the
+    ///     device until the person continues, and files they turn off are never sent. Pass false
+    ///     only if your app has already shown the person what will be sent.
+    ///   - unifiedLog: also attach what the app wrote to the unified log (`Logger`, `os_log`),
     ///     for apps without a log file. `.app` takes the app's own entries from the last
     ///     15 minutes. Off unless asked for.
-    ///   - includeCrashReport: attach the app's newest crash report from the last 7 days, if macOS
-    ///     wrote one and the app can read it (not in the App Sandbox).
+    ///   - includeCrashReport: on macOS, attach the app's newest crash report from the last 7 days,
+    ///     if macOS wrote one and the app can read it (not in the App Sandbox). On iOS, attach what
+    ///     `installCrashDetection()` recorded when the app last crashed, from the last 7 days.
     ///   - showsProgress: show a small SnagFrog panel while logs are read and uploaded.
     /// - Returns: the report page that was opened, or nil if the person cancelled the review.
     @MainActor
@@ -62,6 +69,9 @@ public struct SnagReporter: Sendable {
         showsProgress: Bool = true
     ) async -> URL? {
         var diagnostics = Self.defaultDiagnostics()
+        #if os(iOS)
+        diagnostics.merge(Self.deviceDiagnostics()) { _, new in new }
+        #endif
         let files = Self.newestFirst(logFiles).compactMap { Self.tail(of: $0, maxBytes: maxLogBytes) }
         var crashFile: Attachment?
         if includeCrashReport, let crash = Self.latestCrash() {
@@ -79,7 +89,7 @@ public struct SnagReporter: Sendable {
         // the main thread, with the progress panel up.
         var systemLog: Attachment?
         if let unifiedLog {
-            #if canImport(AppKit)
+            #if canImport(AppKit) || os(iOS)
             let progress = showsProgress ? SnagProgressPanel.show() : nil
             #endif
             let bundleID = Bundle.main.bundleIdentifier
@@ -87,7 +97,7 @@ public struct SnagReporter: Sendable {
             systemLog = await Task.detached(priority: .userInitiated) {
                 Self.unifiedLogAttachment(unifiedLog, bundleID: bundleID, maxBytes: maxBytes)
             }.value
-            #if canImport(AppKit)
+            #if canImport(AppKit) || os(iOS)
             progress?.close()
             #endif
         }
@@ -102,18 +112,25 @@ public struct SnagReporter: Sendable {
             let destination = baseURL
             review = { Self.reviewInWindow(diagnostics: $0, files: $1, destination: destination) }
         }
+        #elseif os(iOS)
+        if reviewsBeforeUpload {
+            let destination = baseURL
+            review = { await Self.reviewInSheet(diagnostics: $0, files: $1, destination: destination) }
+        }
         #endif
         guard let url = await submit(
             diagnostics: diagnostics, files: attachments, showsProgress: showsProgress, review: review
         ) else { return nil }
         #if canImport(AppKit)
         NSWorkspace.shared.open(url)
+        #elseif os(iOS)
+        Self.openReportPage(url, presentation: reportPagePresentation)
         #endif
         return url
     }
 
     /// Shows what was collected and returns the files to send, or nil to send nothing.
-    typealias Reviewer = @MainActor (_ diagnostics: [String: String], _ files: [Attachment]) -> [Attachment]?
+    typealias Reviewer = @MainActor (_ diagnostics: [String: String], _ files: [Attachment]) async -> [Attachment]?
 
     /// Review first, then upload: no request is made until `review` returns, and only the files
     /// it returns are uploaded. Returns the page to open, or nil if the review was cancelled.
@@ -126,10 +143,10 @@ public struct SnagReporter: Sendable {
     ) async -> URL? {
         var files = files
         if let review {
-            guard let kept = review(diagnostics, files) else { return nil }
+            guard let kept = await review(diagnostics, files) else { return nil }
             files = kept
         }
-        #if canImport(AppKit)
+        #if canImport(AppKit) || os(iOS)
         let progress = showsProgress ? SnagProgressPanel.show(message: "Opening the report form…") : nil
         defer { progress?.close() }
         #endif
@@ -234,15 +251,25 @@ public struct SnagReporter: Sendable {
         d["build"] = info["CFBundleVersion"] as? String
         d["bundle_id"] = bundle.bundleIdentifier
         let v = ProcessInfo.processInfo.operatingSystemVersion
+        #if os(iOS)
+        d["os_version"] = "iOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+        d.merge(mobileDiagnostics()) { _, new in new }
+        #else
         d["os_version"] = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
         d["device_model"] = sysctlString("hw.model")
+        #endif
         #if arch(arm64)
         d["arch"] = "arm64"
         #elseif arch(x86_64)
         d["arch"] = ProcessInfo.processInfo.isTranslated ? "x86_64 (Rosetta)" : "x86_64"
         #endif
         d["locale"] = Locale.current.identifier
+        #if os(iOS)
+        // Phones have a few GB, and report a little less than the box says: "5.6", not "5".
+        d["memory_gb"] = String(format: "%.1f", Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824)
+        #else
         d["memory_gb"] = String(ProcessInfo.processInfo.physicalMemory / 1_073_741_824)
+        #endif
         return d.compactMapValues { $0 }
     }
 
@@ -272,12 +299,22 @@ public struct SnagReporter: Sendable {
         view.cacheDisplay(in: view.bounds, to: rep)
         guard let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else { return nil }
         return Attachment(filename: "window.jpg", contentType: "image/jpeg", data: jpeg)
+        #elseif os(iOS)
+        guard let window = keyWindow(), window.bounds.width > 0, window.bounds.height > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat(for: window.traitCollection)
+        // 2x is plenty to read a screen and keeps a Pro Max screenshot well under the upload limit.
+        format.scale = min(format.scale, 2)
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
+        }
+        guard let jpeg = image.jpegData(compressionQuality: 0.7) else { return nil }
+        return Attachment(filename: "window.jpg", contentType: "image/jpeg", data: jpeg)
         #else
         return nil
         #endif
     }
 
-    private static func sysctlString(_ name: String) -> String? {
+    static func sysctlString(_ name: String) -> String? {
         var size = 0
         guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
         var buffer = [CChar](repeating: 0, count: size)

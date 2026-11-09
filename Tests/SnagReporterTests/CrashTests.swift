@@ -1,6 +1,9 @@
 import XCTest
 @testable import SnagReporter
 
+// macOS crash reports (.ips files). iOS records its own crashes: see IOSCrashTests.
+#if os(macOS)
+
 final class CrashTests: XCTestCase {
     var dir: URL!
 
@@ -90,3 +93,4 @@ final class CrashTests: XCTestCase {
         XCTAssertFalse(SnagReporter.isNewCrash(old, lastSeen: nil, now: now))
     }
 }
+#endif

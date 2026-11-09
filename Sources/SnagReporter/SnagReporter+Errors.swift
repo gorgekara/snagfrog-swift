@@ -52,12 +52,12 @@ extension SnagReporter {
     }
 
     /// Call once at launch to report a crash on its own, without asking: if macOS wrote a crash
-    /// report for the app since the last check, its exception and the crashed thread's frames are
+    /// report for the app since the last check (on iOS: if `installCrashDetection()` recorded one), its exception and the crashed thread's frames are
     /// sent to the Errors tab. Each crash is sent once. The crash file itself is not uploaded.
     ///
     /// This is off unless you call it. Use `offerReportAfterCrash` instead to ask first, and only
     /// use this one if your privacy policy says the app reports crashes automatically. A sandboxed
-    /// app cannot read crash reports, so there it does nothing.
+    /// Mac app cannot read crash reports, so there it does nothing.
     ///
     /// - Returns: true if a crash was sent.
     @discardableResult
@@ -65,7 +65,11 @@ extension SnagReporter {
         guard let crash = Self.latestCrash() else { return false }
         let lastSent = defaults.object(forKey: Self.lastCrashSentKey) as? Date
         guard Self.isNewCrash(crash, lastSeen: lastSent) else { return false }
+        #if os(iOS)
+        let stack = Self.head(of: crash.file, maxBytes: Self.maxCrashBytes).flatMap(Self.recordedCrashStack)
+        #else
         let stack = Self.head(of: crash.file, maxBytes: Self.maxCrashBytes).flatMap(Self.crashedThreadStack)
+        #endif
         do {
             try await send(error: crash.summary ?? "Crash", stack: stack, isCrash: true)
         } catch {

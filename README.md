@@ -1,8 +1,9 @@
-# SnagReporter for macOS
+# SnagReporter for macOS and iOS
 
-Let people report bugs from your Mac app to [SnagFrog](https://snagfrog.com). One call uploads
+Let people report bugs from your Mac or iOS app to [SnagFrog](https://snagfrog.com). One call uploads
 your logs (files, or the app's entries in the unified log), standard diagnostics and a snapshot
-of the key window, then opens your app's report page in the browser. The reporter sees what's attached and can opt out before sending.
+of the key window, then opens your app's report page (in the browser on the Mac, in a Safari
+sheet on iOS). The reporter sees what's attached and can opt out before sending.
 
 ## Install
 
@@ -15,10 +16,10 @@ https://github.com/gorgekara/snagfrog-swift
 Or in `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.5.0")
+.package(url: "https://github.com/gorgekara/snagfrog-swift", from: "0.6.0")
 ```
 
-Requires macOS 12 or later.
+Requires macOS 12 or later, or iOS 15 or later. iOS setup is [below](#ios).
 
 ## Use
 
@@ -151,6 +152,91 @@ If the upload fails, the report page still opens, with the diagnostics in the UR
 
 The public key is publishable: all it can do is create capture sessions for that app. You can
 rotate it from the dashboard.
+
+## iOS
+
+Since 0.6.0 the same package works in iPhone and iPad apps (iOS 15 or later). `report()` and
+the error API are the same as on the Mac; what differs is set up below.
+
+```swift
+import SnagReporter
+
+let snag = SnagReporter(appSlug: "your-app", publicKey: "snag_pk_…",
+                        baseURL: URL(string: "https://stareglare.com")!)
+
+@main
+struct MyApp: App {
+    init() {
+        // As early as possible: records crashes so the next launch can report them.
+        SnagReporter.installCrashDetection(unifiedLog: .app)
+        // Optional: shaking the device opens a report.
+        snag.reportsOnShake(logFiles: { [logFileURL] }, unifiedLog: .app)
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                // After a crash: "MyApp quit unexpectedly. Would you like to send a report?"
+                .task { await snag.offerReportAfterCrash(logFiles: [logFileURL]) }
+        }
+    }
+}
+
+// From your own button, e.g. in Settings or a Help screen:
+Button("Report an Issue") { Task { await snag.report(logFiles: [logFileURL], unifiedLog: .app) } }
+```
+
+In a UIKit app, call `installCrashDetection()` and `reportsOnShake` in
+`application(_:didFinishLaunchingWithOptions:)`, and `offerReportAfterCrash` once your first
+screen is showing.
+
+**Review.** Before anything is uploaded, a sheet lists the details and each file with a switch
+and a Show button, as the review window does on the Mac. Cancel sends nothing.
+
+**Report page.** It opens in a Safari sheet over your app; the person closes it to come back.
+To open Safari instead: `snag.reportPagePresentation = .browser`.
+
+**Snapshot.** A JPEG of the key window, taken before the review sheet appears
+(`includeWindowSnapshot: false` to skip it). Only your app's own window is captured: not the
+keyboard, system alerts or other apps.
+
+**Details.** App version and build, iOS (or iPadOS) version, model identifier (`iPhone15,2`),
+device family, architecture, locale, memory, how much more memory the app may use, free disk,
+battery level and charging, Low Power Mode, thermal state, orientation and screen size. The
+device's name is never read: it is often the owner's name.
+
+**Unified log.** `unifiedLog: .app` works as on the Mac: this launch's entries only. In the
+simulator, and while Xcode is attached, iOS does not hide `<private>` values, so those entries
+show their text there; on a device in use they are hidden as usual.
+
+**Shake to report.** Off unless you call `reportsOnShake`. `SnagReporter.stopReportingOnShake()`
+turns it off again. A view controller that handles shakes itself and does not call `super`
+keeps them.
+
+### Crashes on iOS
+
+iOS does not let an app read its crash reports, so `installCrashDetection()` records crashes
+itself:
+
+- an uncaught Objective-C exception (`NSRangeException`, …): its name, reason and stack, and,
+  if you pass `unifiedLog:`, the app's unified log up to the crash, since the next launch cannot
+  read it;
+- a fatal signal: a Swift runtime error (force-unwrapping nil, `fatalError`, an index out of
+  range: `EXC_BREAKPOINT (SIGTRAP)`), a bad memory access (`SIGSEGV`, `SIGBUS`), an abort, an
+  illegal instruction or an arithmetic error. Only the stack can be recorded safely here, not
+  Swift's message or the log.
+
+The record also names your binary's load address and UUID, so `atos` and your dSYM turn the
+addresses into function names:
+`atos -o MyApp.app.dSYM/Contents/Resources/DWARF/MyApp -l <load address> <address>`.
+
+On the next launch only, `report()` attaches that crash (as `last-crash.crash`) and marks the
+report as a crash, like a Mac crash report; `offerReportAfterCrash` asks the person first, once
+per crash; and `sendCrashAutomatically()` sends the exception and stack to the Errors tab without
+asking (same privacy rules as on the Mac). Crash handlers installed before yours, such as another
+crash reporter, still run afterwards, and iOS still writes its own report for Xcode's Organizer.
+Being ended by iOS (for memory, a watchdog timeout, or the person swiping the app away) is not a
+crash and is not recorded. With the debugger attached, Xcode stops on the crash first.
 
 ## License
 
