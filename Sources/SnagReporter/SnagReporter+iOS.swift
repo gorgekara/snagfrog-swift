@@ -12,7 +12,7 @@ public enum ReportPagePresentation: Sendable {
 }
 
 extension SnagReporter {
-    /// The SnagFrog app icon, for buttons and settings rows.
+    /// The StareGlare app icon, for buttons and settings rows.
     ///
     /// As a Swift package it comes from the package's resources. If you vendor these files into
     /// an app instead, add `SnagIcon.png` to the app's asset catalog as an image set named "SnagIcon".
@@ -139,7 +139,7 @@ extension SnagReporter {
     }
 }
 
-/// A small card with the SnagFrog icon and a spinner over the app, shown while logs are read and
+/// A small card with the StareGlare icon and a spinner over the app, shown while logs are read and
 /// uploaded. The iOS counterpart of the Mac's floating panel.
 @MainActor
 final class SnagProgressPanel {

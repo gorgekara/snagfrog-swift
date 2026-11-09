@@ -6,7 +6,7 @@ import AppKit
 import UIKit
 #endif
 
-/// Opens your app's SnagFrog report page with logs, diagnostics and (optionally) a snapshot of
+/// Opens your app's StareGlare report page with logs, diagnostics and (optionally) a snapshot of
 /// the key window: in the browser on macOS, in an in-app Safari sheet (or Safari) on iOS. The
 /// person reviews what was collected first; nothing is uploaded until they continue.
 ///
@@ -55,7 +55,7 @@ public struct SnagReporter: Sendable {
     ///   - includeCrashReport: on macOS, attach the app's newest crash report from the last 7 days,
     ///     if macOS wrote one and the app can read it (not in the App Sandbox). On iOS, attach what
     ///     `installCrashDetection()` recorded when the app last crashed, from the last 7 days.
-    ///   - showsProgress: show a small SnagFrog panel while logs are read and uploaded.
+    ///   - showsProgress: show a small StareGlare panel while logs are read and uploaded.
     /// - Returns: the report page that was opened, or nil if the person cancelled the review.
     @MainActor
     @discardableResult
@@ -153,7 +153,7 @@ public struct SnagReporter: Sendable {
         do {
             return try await createSession(diagnostics: diagnostics, files: files)
         } catch {
-            Self.log.error("SnagFrog session upload failed, opening the plain report page: \(String(describing: error), privacy: .public)")
+            Self.log.error("StareGlare session upload failed, opening the plain report page: \(String(describing: error), privacy: .public)")
             #if DEBUG
             print("[SnagReporter] session upload failed: \(error)")
             #endif
@@ -161,7 +161,7 @@ public struct SnagReporter: Sendable {
         }
     }
 
-    static let log = Logger(subsystem: "com.snagfrog.SnagReporter", category: "upload")
+    static let log = Logger(subsystem: "com.stareglare.SnagReporter", category: "upload")
 
     /// Orders log files newest first (by modification date), so the oldest are dropped first.
     static func newestFirst(_ files: [URL]) -> [URL] {

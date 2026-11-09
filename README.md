@@ -1,6 +1,6 @@
 # SnagReporter for macOS and iOS
 
-Let people report bugs from your Mac or iOS app to [SnagFrog](https://snagfrog.com). One call uploads
+Let people report bugs from your Mac or iOS app to [StareGlare](https://stareglare.com). One call uploads
 your logs (files, or the app's entries in the unified log), standard diagnostics and a snapshot
 of the key window, then opens your app's report page (in the browser on the Mac, in a Safari
 sheet on iOS). The reporter sees what's attached and can opt out before sending.
@@ -28,11 +28,11 @@ import SnagReporter
 
 let snag = SnagReporter(
     appSlug: "your-app",
-    publicKey: "snag_pk_…",                      // SnagFrog dashboard → Apps → your app
-    baseURL: URL(string: "https://snagfrog.com")!
+    publicKey: "snag_pk_…",                      // StareGlare dashboard → Apps → your app
+    baseURL: URL(string: "https://stareglare.com")!
 )
 
-// Adds "Report an Issue…" with the SnagFrog icon to the Help menu:
+// Adds "Report an Issue…" with the StareGlare icon to the Help menu:
 NSApp.helpMenu?.addItem(snag.menuItem(logFiles: { [logFileURL] }))
 
 // …or trigger it from your own UI:
@@ -98,7 +98,7 @@ What to know:
 ## After a crash
 
 If macOS wrote a crash report for your app in the last 7 days, `report()` attaches it and marks
-the report as a crash in your SnagFrog inbox (`includeCrashReport: false` to skip it).
+the report as a crash in your StareGlare inbox (`includeCrashReport: false` to skip it).
 
 To ask people right after a crash, call this once at launch:
 
@@ -117,7 +117,7 @@ nothing and reports work as usual.
 
 ## Reporting errors and crashes without asking
 
-Off unless you call it. These send to the app's **Errors** tab in SnagFrog, where identical errors
+Off unless you call it. These send to the app's **Errors** tab in StareGlare, where identical errors
 are grouped and counted. Nothing is shown to the person using the app, and no name, email address
 or file is sent: only the message, the stack, the app version and the macOS version.
 

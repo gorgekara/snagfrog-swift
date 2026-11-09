@@ -15,7 +15,7 @@ extension SnagReporter {
     /// Frames of the crashed thread that are sent.
     static let maxCrashFrames = 40
 
-    /// Sends one error to the app's Errors tab in SnagFrog, where identical ones are grouped and
+    /// Sends one error to the app's Errors tab in StareGlare, where identical ones are grouped and
     /// counted. Nothing is shown to the person using the app and nothing identifies them: no name,
     /// email address or files. The home folder is replaced with `~` in the message and the stack.
     ///
